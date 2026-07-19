@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>高考总分趋势 — 学业追踪报告</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, "Microsoft YaHei", sans-serif; background: #f5f7fa; color: #2c3e50; line-height: 1.6; padding: 20px; }
+  .card { max-width: 800px; margin: 0 auto; background: #fff; border-radius: 12px; padding: 32px; box-shadow: 0 2px 12px rgba(0,0,0,.08); }
+  h1 { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+  .date { font-size: 13px; color: #94a3b8; margin-bottom: 24px; }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px; }
+  th { text-align: left; padding: 10px 12px; border-bottom: 2px solid #e2e8f0; color: #64748b; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+  td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; }
+  .confidence { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 11px; font-weight: 600; }
+  .confidence-A { background: #dcfce7; color: #166534; }
+  .confidence-B { background: #fef9c3; color: #854d0e; }
+  .confidence-C { background: #f3f4f6; color: #6b7280; }
+.confidence-D { background: #fee2e2; color: #991b1b; }
+  .section { padding: 16px 0; border-bottom: 1px solid #f1f5f9; }
+  .section:last-child { border-bottom: none; }
+  .section-title { font-size: 14px; font-weight: 600; color: #475569; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; font-size: 14px; }
+  .stat-label { color: #64748b; }
+  .stat-value { font-weight: 500; }
+  .trend-up { color: #16a34a; }
+  .trend-down { color: #dc2626; }
+  .trend-flat { color: #f59e0b; }
+  details { margin-top: 24px; }
+  summary { font-size: 13px; color: #94a3b8; cursor: pointer; }
+  .disclaimer { font-size: 12px; color: #94a3b8; margin-top: 12px; padding: 12px; background: #f8fafc; border-radius: 6px; white-space: pre-line; line-height: 1.8; }
+  .cross-validation { font-size: 13px; color: #64748b; margin-top: 8px; padding: 8px 12px; background: #f8fafc; border-radius: 6px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>高考总分趋势</h1>
+  <div class="date">{{ generated_at }}</div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>日期</th>
+        <th>考试</th>
+        <th>等效分</th>
+        <th>置信度</th>
+        <th>方法</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for exam in exams %}
+      <tr>
+        <td>{{ exam.date }}</td>
+        <td>{{ exam.name }}</td>
+        <td><strong>{{ exam.score }}</strong></td>
+        <td><span class="confidence confidence-{{ exam.confidence }}">{{ exam.confidence }}级</span></td>
+        <td>{{ exam.method }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if trend_text != "数据不足" %}
+  <div class="section">
+    <div class="section-title">趋势判断</div>
+    <div class="stat-row">
+      <span class="stat-label">趋势方向</span>
+      <span class="stat-value trend-{{ trend_class }}">{{ trend_arrow }} {{ trend_text }}</span>
+    </div>
+    {% if has_analysis %}
+    <div class="stat-row">
+      <span class="stat-label">波动幅度 (σ)</span>
+      <span class="stat-value">{{ sigma }}分</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">浮动区间</span>
+      <span class="stat-value">[{{ volatility_lower }}, {{ volatility_upper }}]</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">标签分布</span>
+      <span class="stat-value">积极{{ labels.positive }}次 正常{{ labels.normal }}次 消极{{ labels.negative }}次</span>
+    </div>
+    {% if volatility_style and volatility_style != "-" %}
+    <div class="stat-row">
+      <span class="stat-label">波动风格</span>
+      <span class="stat-value">{{ volatility_style }}</span>
+    </div>
+    {% endif %}
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if cross_validations %}
+  <div class="cross-validation">
+    {% for cv in cross_validations %}
+    交叉验证（{{ cv.method }}）：{{ cv.score }}分 · 差异 {{ cv.diff }}分<br>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <details>
+    <summary>查看详细声明</summary>
+    <div class="disclaimer">{{ disclaimer }}</div>
+  </details>
+</div>
+</body>
+</html>

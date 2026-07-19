@@ -2,10 +2,15 @@
 """Calculate equivalent Gaokao score using all available methods.
 
 Priority order:
-  1. 分数线对照法 (Score-line comparison) — A级
-  2. 校内排名对照法 (School ranking lookup) — A级
-  3. 全市/联盟排名锚定法 (Percentile anchoring) — A级
+  1. 百分位排名锚定法 (Percentile anchoring) — A级(高三)/B级(高二)
+  2. 校内排名对照法 (School ranking lookup) — C级
+  3. 等比例放缩法/分数线对照法 (Score-line comparison) — C级
   4. 校排名估算 (School rank estimation) — C级
+
+Grade adaptation:
+  - 高三: normal equivalent score calculation
+  - 高二: city-wide exam scores downgraded to B-level
+  - 高一: no equivalent score, grade_blocked status returned
 
 Input: JSON via stdin
 Output: JSON with primary method, score, confidence, error range, cross-validations
@@ -31,7 +36,7 @@ def read_sheet_rows(ws):
 
 def read_macro_data(workspace):
     """Read all macro data sheets."""
-    path = os.path.join(workspace, "数据", "宏观数据", "宏观数据_只读.xlsx")
+    path = os.path.join(workspace, "data", "macro", "宏观数据_只读.xlsx")
     if not os.path.exists(path):
         return None
     wb = load_workbook(path, data_only=True)
@@ -42,7 +47,7 @@ def read_macro_data(workspace):
 
 
 def method_score_line(data, macro):
-    """Method 1: 分数线对照法（等比例放缩）— A级."""
+    """Method 3: 分数线对照法（等比例放缩）— C级."""
     special_line_exam = data.get("special_line_exam")
     if not special_line_exam:
         return None
@@ -66,7 +71,7 @@ def method_score_line(data, macro):
         return {
             "method": "分数线对照法",
             "score": 750.0,
-            "confidence": "A",
+            "confidence": "C",
             "detail": f"满分750 → 等效分750",
         }
 
@@ -74,13 +79,13 @@ def method_score_line(data, macro):
     return {
         "method": "分数线对照法",
         "score": round(es, 1),
-        "confidence": "A",
+        "confidence": "C",
         "detail": f"等效分 = (750-{gaokao_sl})/(750-{special_line_exam})×({total_score}-{special_line_exam})+{gaokao_sl} = {es:.1f}",
     }
 
 
 def method_school_lookup(data, macro):
-    """Method 2: 校内排名对照法 — A级."""
+    """Method 2: 校内排名对照法 — C级."""
     school_rank = data.get("school_rank")
     if not school_rank:
         return None
@@ -130,13 +135,13 @@ def method_school_lookup(data, macro):
     return {
         "method": "校内排名对照法",
         "score": round(score, 1),
-        "confidence": "A",
+        "confidence": "C",
         "detail": detail,
     }
 
 
-def method_percentile(data, macro):
-    """Method 3: 全市/联盟排名锚定法 — A级."""
+def method_percentile(data, macro, grade="高三"):
+    """Method 1: 百分位排名锚定法 — A级(高三)/B级(高二)."""
     rank = data.get("city_rank") or data.get("alliance_rank")
     total = data.get("city_total") or data.get("alliance_total")
 
@@ -180,10 +185,11 @@ def method_percentile(data, macro):
         return None
 
     source = "全市排名" if data.get("city_rank") else "联盟排名"
+    confidence = "A" if grade == "高三" else "B"
     return {
         "method": "排名锚定法",
         "score": round(best_score, 1),
-        "confidence": "A",
+        "confidence": confidence,
         "detail": f"{source}{rank}/{total} → 百分位{percentile:.3f} → 等效分{best_score:.0f}",
     }
 
@@ -265,10 +271,20 @@ def run(data):
             "reason": "宏观数据_只读.xlsx 不存在，请先完成初始设置",
         }
 
+    grade = str(data.get("grade", "高三"))
+
+    # 高一不计算等效分
+    if grade == "高一":
+        return {
+            "status": "grade_blocked",
+            "reason": "高一阶段不计算等效高考分。知识范围与高考差距大，选科可能未确定。等效分功能将在高三自动启用。",
+            "grade": "高一",
+        }
+
     methods = []
 
     # Try all methods in priority order
-    result = method_score_line(data, macro)
+    result = method_percentile(data, macro, grade)
     if result:
         methods.append(result)
 
@@ -276,7 +292,7 @@ def run(data):
     if result:
         methods.append(result)
 
-    result = method_percentile(data, macro)
+    result = method_score_line(data, macro)
     if result:
         methods.append(result)
 

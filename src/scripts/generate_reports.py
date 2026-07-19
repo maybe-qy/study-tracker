@@ -23,16 +23,17 @@ from jinja2 import Environment, FileSystemLoader
 DISCLAIMER = """声明与局限性
 
 1. 等效分方法：
-   优先使用分数线对照法（等比例放缩），基于省级特控线固定锚点。
-   全市/联盟排名锚定法作为交叉验证。
+   优先使用百分位排名锚定法，基于全市排名+一分一段表。
    校内排名对照法在有本校历届高考数据时使用。
+   等比例放缩法（分数线对照法）作为无排名时的降级方案。
    等效分仅供参考，不构成对高考成绩的预测。
 
 2. 置信度分级：
-   A级：分数线对照法、校内排名对照法（有对照表）、全市/联盟排名锚定法、全市/联盟统一赋分。
-   B级：主科原始分、全市统考/联盟考试中无独立划线的选科。
-   C级：无本校高考对照数据的校排名估算。
-   A级权重1.0，B级权重0.8，C级权重0.5。
+   A级：高三全市统考排名锚定等效分；全市统一赋分（用户确认来源）。
+   B级：高二全市统考排名锚定等效分；语数英原始分（所有年级）。
+   C级：校排名折算等效分；等比例放缩法等效分。
+   D级：无排名无分数线分数；高一等效分尝试。
+   A级权重1.0，B级权重0.8，C级权重0.5，D级不参与。
 
 3. 数据来源：用户上传。
 
@@ -59,26 +60,26 @@ def load_data(workspace):
     data = {"exams": [], "equivalent": [], "subjects": {}, "volatility": []}
 
     # 成绩总表
-    path = os.path.join(workspace, "数据", "成绩提取", "成绩总表.xlsx")
+    path = os.path.join(workspace, "data", "personal", "成绩总表.xlsx")
     if os.path.exists(path):
         wb = load_workbook(path, data_only=True)
         data["exams"] = read_sheet_dicts(wb["成绩总表"])
 
     # 等效分记录
-    path = os.path.join(workspace, "数据", "成绩提取", "等效分记录.xlsx")
+    path = os.path.join(workspace, "data", "personal", "等效分记录.xlsx")
     if os.path.exists(path):
         wb = load_workbook(path, data_only=True)
         data["equivalent"] = read_sheet_dicts(wb["等效分记录"])
 
     # 单科追踪
-    path = os.path.join(workspace, "数据", "成绩提取", "单科追踪.xlsx")
+    path = os.path.join(workspace, "data", "personal", "单科追踪.xlsx")
     if os.path.exists(path):
         wb = load_workbook(path, data_only=True)
         for name in wb.sheetnames:
             data["subjects"][name] = read_sheet_dicts(wb[name])
 
     # 宏观数据
-    path = os.path.join(workspace, "数据", "宏观数据", "宏观数据_只读.xlsx")
+    path = os.path.join(workspace, "data", "macro", "宏观数据_只读.xlsx")
     data["macro"] = {}
     if os.path.exists(path):
         wb = load_workbook(path, data_only=True)
@@ -86,7 +87,7 @@ def load_data(workspace):
             data["macro"][name] = read_sheet_dicts(wb[name])
 
     # 学校招生数据
-    path = os.path.join(workspace, "数据", "学校招生录取情况", "学校招生_只读.xlsx")
+    path = os.path.join(workspace, "data", "school", "学校招生_只读.xlsx")
     data["admission"] = {}
     if os.path.exists(path):
         wb = load_workbook(path, data_only=True)
@@ -97,6 +98,22 @@ def load_data(workspace):
 
 
 # ─── HTML generation helpers ──────────────────────────────────────────
+
+CONFIDENCE_WEIGHTS = {"A": 1.0, "B": 0.8, "C": 0.5, "D": 0.0}
+
+
+def filter_weighted(records):
+    """Extract (score, weight) tuples from equivalent score records, excluding D-level."""
+    weighted = []
+    for r in records:
+        conf = str(r.get("置信度", "A")).strip()
+        weight = CONFIDENCE_WEIGHTS.get(conf, 1.0)
+        if weight > 0:
+            score = float(r.get("等效分（主结果）", 0) or 0)
+            if score > 0:
+                weighted.append((score, weight))
+    return weighted
+
 
 def compute_trend(scores):
     """Determine trend direction: 'up', 'down', or 'flat'. Returns (class, arrow, text)."""
@@ -132,6 +149,39 @@ def compute_volatility(scores):
     return (round(sigma, 1), round(mean - 1.5 * sigma, 1), round(mean + 1.5 * sigma, 1))
 
 
+def compute_trend_weighted(weighted_scores):
+    """Weighted linear trend. weighted_scores: list of (score, weight)."""
+    n = len(weighted_scores)
+    if n < 2:
+        return ("flat", "→", "数据不足")
+    scores = [s for s, _ in weighted_scores]
+    x_mean = (n - 1) / 2
+    y_mean = sum(scores) / n
+    num = sum((i - x_mean) * scores[i] for i in range(n))
+    den = sum((i - x_mean) ** 2 for i in range(n))
+    if den == 0:
+        return ("flat", "→", "持平")
+    slope = num / den
+    if slope > 1.5:
+        return ("up", "↑", "上升")
+    elif slope < -1.5:
+        return ("down", "↓", "下降")
+    else:
+        return ("flat", "→", "持平")
+
+
+def compute_volatility_weighted(weighted_scores):
+    """Weighted sigma and volatility range."""
+    if len(weighted_scores) < 4:
+        return (None, None, None)
+    scores = [s for s, _ in weighted_scores]
+    weights = [w for _, w in weighted_scores]
+    w_mean = sum(s * w for s, w in zip(scores, weights)) / sum(weights)
+    w_var = sum(w * (s - w_mean) ** 2 for s, w in zip(scores, weights)) / sum(weights)
+    sigma = w_var ** 0.5
+    return (round(sigma, 1), round(w_mean - 1.5 * sigma, 1), round(w_mean + 1.5 * sigma, 1))
+
+
 def prediction_state(scores):
     """Compute prediction label for latest score. Returns '积极'/'正常'/'消极'."""
     if len(scores) < 4:
@@ -158,26 +208,58 @@ def prediction_state(scores):
 
 
 def eval_labels(scores):
-    """Count positive/normal/negative labels for all data points."""
-    if len(scores) < 5:
-        return None
+    """Count positive/normal/negative labels + return label sequence for trend detection."""
+    if len(scores) < 4:
+        return (None, None)
     labels = {"积极": 0, "正常": 0, "消极": 0}
-    # For each point after the 3rd, classify based on prior trend
+    sequence = []
+    alpha = 0.3
+    ewma = scores[0]
+    for s in scores[1:-1]:
+        ewma = alpha * s + (1 - alpha) * ewma
     for i in range(3, len(scores)):
         prior = scores[:i+1]
-        # Simple: compare to EWMA
-        alpha = 0.3
         ewma = prior[0]
         for s in prior[1:-1]:
             ewma = alpha * s + (1 - alpha) * ewma
         latest = prior[-1]
         if latest > ewma + 3:
             labels["积极"] += 1
+            sequence.append("积极")
         elif latest < ewma - 3:
             labels["消极"] += 1
+            sequence.append("消极")
         else:
             labels["正常"] += 1
-    return labels
+            sequence.append("正常")
+    return (labels, sequence)
+
+
+def classify_volatility_style(labels, sigma, sequence):
+    """Classify volatility style: 稳定型/波动型/趋势型. Returns None if insufficient data."""
+    if labels is None or sequence is None or sigma is None:
+        return None
+    total = labels["积极"] + labels["正常"] + labels["消极"]
+    if total == 0:
+        return None
+    normal_ratio = labels["正常"] / total
+    active_ratio = (labels["积极"] + labels["消极"]) / total
+    # 趋势型: 3+ consecutive same direction
+    max_consecutive = 1
+    current_run = 1
+    for i in range(1, len(sequence)):
+        if sequence[i] == sequence[i-1]:
+            current_run += 1
+            max_consecutive = max(max_consecutive, current_run)
+        else:
+            current_run = 1
+    if max_consecutive >= 3:
+        return "趋势型"
+    if active_ratio >= 0.5 and max_consecutive < 3:
+        return "波动型"
+    if normal_ratio >= 0.7:
+        return "稳定型"
+    return "波动型"
 
 
 # ─── Report generators ─────────────────────────────────────────────────
@@ -215,11 +297,14 @@ def render_personal(data, env):
 
     latest = eq_records[-1]
     eq_scores = [float(r.get("等效分（主结果）", 0) or 0) for r in eq_records if r.get("等效分（主结果）")]
+    weighted = filter_weighted(eq_records)
 
     trend_class, trend_arrow, trend_text = compute_trend(eq_scores)
-    sigma, vol_low, vol_high = compute_volatility(eq_scores)
+    sigma, vol_low, vol_high = compute_volatility_weighted(weighted)
     pred = prediction_state(eq_scores)
     has_analysis = len(eq_scores) >= 4
+    labels, label_sequence = eval_labels(eq_scores) if len(eq_scores) >= 4 else (None, None)
+    volatility_style = classify_volatility_style(labels, sigma, label_sequence) if has_analysis else None
 
     # Target university
     target_university = None
@@ -260,7 +345,7 @@ def render_personal(data, env):
 
     # Personal info (from config)
     personal_info = None
-    config_path = os.path.join(data.get("_workspace", ""), "数据", "config.json")
+    config_path = os.path.join(data.get("_workspace", ""), "data", "config.json")
     if os.path.exists(config_path):
         with open(config_path, "r", encoding="utf-8") as f:
             config = json.load(f)
@@ -292,6 +377,7 @@ def render_personal(data, env):
         volatility_lower=vol_low or "-",
         volatility_upper=vol_high or "-",
         sigma=f"{sigma}分" if sigma else "-",
+        volatility_style=volatility_style or "-",
         target_university=target_university,
         gap_text=gap_text,
         gap_class=gap_class,
@@ -334,10 +420,12 @@ def render_trend(data, env):
         })
 
     eq_scores = [float(r["等效分（主结果）"]) for r in eq_records if r.get("等效分（主结果）")]
+    weighted = filter_weighted(eq_records)
     trend_class, trend_arrow, trend_text = compute_trend(eq_scores)
-    sigma, vol_low, vol_high = compute_volatility(eq_scores)
+    sigma, vol_low, vol_high = compute_volatility_weighted(weighted)
     has_analysis = len(eq_scores) >= 4
-    labels = eval_labels(eq_scores)
+    labels, label_sequence = eval_labels(eq_scores) if len(eq_scores) >= 4 else (None, None)
+    volatility_style = classify_volatility_style(labels, sigma, label_sequence) if has_analysis else None
 
     # Cross validations summary
     cross_validations = []
@@ -366,26 +454,62 @@ def render_trend(data, env):
         volatility_lower=vol_low or "-",
         volatility_upper=vol_high or "-",
         labels={"positive": labels["积极"] if labels else "-", "normal": labels["正常"] if labels else "-", "negative": labels["消极"] if labels else "-"},
+        volatility_style=volatility_style or "-",
         cross_validations=cross_validations,
         disclaimer=DISCLAIMER,
     )
 
 
 def render_subject(data, env, subject_name, sheet_name):
-    """Render a single subject tracking HTML."""
+    """Render a single subject tracking HTML.
+    Reads from 单科追踪.xlsx first; falls back to 成绩总表.xlsx exam records.
+    """
     subject_data = data["subjects"].get(sheet_name, [])
     records = []
     scores = []
-    for r in subject_data:
-        raw = r.get("原始分")
-        scores.append(float(raw) if raw else None)
-        records.append({
-            "date": r.get("日期", "-"),
-            "exam": r.get("考试名", "-"),
-            "raw": raw or "-",
-            "assigned": r.get("赋分") or "-",
-            "confidence": r.get("赋分置信度") or "-",
-        })
+
+    if subject_data:
+        for r in subject_data:
+            raw = r.get("原始分")
+            scores.append(float(raw) if raw else None)
+            records.append({
+                "date": r.get("日期", "-"),
+                "exam": r.get("考试名", "-"),
+                "raw": raw or "-",
+                "assigned": r.get("赋分") or "-",
+                "confidence": r.get("赋分置信度") or "-",
+            })
+    else:
+        # Fallback: extract from exam records (成绩总表)
+        for exam in data.get("exams", []):
+            raw = None
+            assigned = None
+            conf = None
+
+            # Main subjects
+            if subject_name in ("语文", "数学", "英语"):
+                raw = exam.get(subject_name)
+                conf = "B"  # 语数英原始分 → B级
+            else:
+                # Check 选科 columns
+                for i in range(1, 4):
+                    if str(exam.get(f"选科{i}名称", "")) == subject_name:
+                        raw = exam.get(f"选科{i}原始分")
+                        assigned = exam.get(f"选科{i}赋分")
+                        conf = exam.get(f"选科{i}赋分置信度") or "B"
+                        break
+
+            if raw is None or raw == "":
+                continue
+
+            scores.append(float(raw))
+            records.append({
+                "date": exam.get("日期", "-"),
+                "exam": exam.get("考试名", "-"),
+                "raw": raw if raw else "-",
+                "assigned": assigned if assigned else "-",
+                "confidence": conf if conf else "-",
+            })
 
     valid_scores = [s for s in scores if s is not None]
     if not valid_scores:
@@ -424,6 +548,10 @@ def run(workspace):
     data = load_data(workspace)
     data["_workspace"] = workspace
 
+    # Ensure output directory exists
+    output_dir = os.path.join(workspace, "output")
+    os.makedirs(output_dir, exist_ok=True)
+
     # Setup Jinja2
     assets_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets")
     if not os.path.isdir(assets_dir):
@@ -436,7 +564,7 @@ def run(workspace):
     # 1. 个人档案
     html = render_personal(data, env)
     if html:
-        p = os.path.join(workspace, "个人档案.html")
+        p = os.path.join(workspace, "output", "个人档案.html")
         with open(p, "w", encoding="utf-8") as f:
             f.write(html)
         generated.append(p)
@@ -444,7 +572,7 @@ def run(workspace):
     # 2. 高考总分趋势
     html = render_trend(data, env)
     if html:
-        p = os.path.join(workspace, "高考总分趋势.html")
+        p = os.path.join(workspace, "output", "高考总分趋势.html")
         with open(p, "w", encoding="utf-8") as f:
             f.write(html)
         generated.append(p)
@@ -480,7 +608,7 @@ def run(workspace):
 
     for sheet_name, subject_name in subject_sheet_map.items():
         html = render_subject(data, env, subject_name, sheet_name)
-        p = os.path.join(workspace, f"{subject_name}追踪.html")
+        p = os.path.join(workspace, "output", f"{subject_name}追踪.html")
         with open(p, "w", encoding="utf-8") as f:
             f.write(html)
         generated.append(p)

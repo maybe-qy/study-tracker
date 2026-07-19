@@ -16,7 +16,7 @@ def make_macro_ws(tmpdir):
     """Create minimal macro data for testing."""
     from openpyxl import Workbook
     ws_root = tmpdir
-    macro_dir = os.path.join(ws_root, "数据", "宏观数据")
+    macro_dir = os.path.join(ws_root, "data", "macro")
     os.makedirs(macro_dir, exist_ok=True)
 
     wb = Workbook()
@@ -59,7 +59,7 @@ def test_method_score_line(tmpdir):
     result = run(data)
     assert result["status"] == "ok"
     assert result["primary_method"] == "分数线对照法"
-    assert result["confidence"] == "A"
+    assert result["confidence"] == "C"
     assert 660 <= result["equivalent_score"] <= 680
     assert result["error_lower"] <= result["equivalent_score"] <= result["error_upper"]
 
@@ -91,7 +91,7 @@ def test_method_school_lookup(tmpdir):
     result = run(data)
     assert result["status"] == "ok"
     assert result["primary_method"] == "校内排名对照法"
-    assert result["confidence"] == "A"
+    assert result["confidence"] == "C"
     assert abs(result["equivalent_score"] - 670) < 5  # 50th rank ≈ 670
 
 
@@ -99,7 +99,7 @@ def make_macro_ws_no_lookup(tmpdir):
     """Create macro data WITHOUT 本校对照表 (so method 4 is the only school method)."""
     from openpyxl import Workbook
     ws_root = tmpdir
-    macro_dir = os.path.join(ws_root, "数据", "宏观数据")
+    macro_dir = os.path.join(ws_root, "data", "macro")
     os.makedirs(macro_dir, exist_ok=True)
 
     wb = Workbook()
@@ -139,7 +139,7 @@ def test_cross_validation(tmpdir):
     }
     result = run(data)
     assert result["status"] == "ok"
-    assert result["primary_method"] == "分数线对照法"
+    assert result["primary_method"] == "排名锚定法"
     assert len(result["cross_validations"]) >= 1
     assert "trust_note" in result
 
@@ -167,7 +167,7 @@ def test_no_macro_file(tmpdir):
 
 
 def test_priority_order(tmpdir):
-    """Test that priority 1 (score-line) beats priority 3 (percentile)."""
+    """Test that priority 1 (percentile) beats priority 3 (score-line)."""
     ws = make_macro_ws(tmpdir)
     data = {
         "workspace": ws,
@@ -178,7 +178,7 @@ def test_priority_order(tmpdir):
     }
     result = run(data)
     assert result["status"] == "ok"
-    assert result["primary_method"] == "分数线对照法"  # priority 1 wins
+    assert result["primary_method"] == "排名锚定法"  # priority 1 wins
 
 
 def test_rank_exceeds_total(tmpdir):
@@ -193,3 +193,49 @@ def test_rank_exceeds_total(tmpdir):
     result = run(data)
     # Should fall through to insufficient since percentile method fails
     assert result["status"] in ("insufficient_data", "ok")
+
+
+def test_percentile_gaoer(tmpdir):
+    """Test that 高二 gets B-level confidence for percentile."""
+    ws = make_macro_ws(tmpdir)
+    data = {
+        "workspace": ws,
+        "total_score": 650,
+        "alliance_rank": 2000,
+        "alliance_total": 20000,
+        "grade": "高二",
+    }
+    result = run(data)
+    assert result["status"] == "ok"
+    assert result["primary_method"] == "排名锚定法"
+    assert result["confidence"] == "B"
+
+
+def test_grade_blocked_gaoyi(tmpdir):
+    """Test that 高一 returns grade_blocked."""
+    ws = make_macro_ws(tmpdir)
+    data = {
+        "workspace": ws,
+        "total_score": 650,
+        "alliance_rank": 2000,
+        "alliance_total": 20000,
+        "grade": "高一",
+    }
+    result = run(data)
+    assert result["status"] == "grade_blocked"
+
+
+def test_percentile_beats_score_line(tmpdir):
+    """Test that percentile method now takes priority over score_line."""
+    ws = make_macro_ws(tmpdir)
+    data = {
+        "workspace": ws,
+        "total_score": 650,
+        "special_line_exam": 546.5,
+        "alliance_rank": 3200,
+        "alliance_total": 21000,
+    }
+    result = run(data)
+    assert result["status"] == "ok"
+    assert result["primary_method"] == "排名锚定法"
+    assert result["confidence"] == "A"  # default 高三

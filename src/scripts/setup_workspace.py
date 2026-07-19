@@ -71,10 +71,9 @@ SCHOOL_SHEETS = {
 
 def create_dirs(workspace):
     dirs = [
-        os.path.join(workspace, "数据", "宏观数据"),
-        os.path.join(workspace, "数据", "学校招生录取情况"),
-        os.path.join(workspace, "数据", "个体数据"),
-        os.path.join(workspace, "数据", "成绩提取"),
+        os.path.join(workspace, "data", "macro"),
+        os.path.join(workspace, "data", "school"),
+        os.path.join(workspace, "data", "personal", "individual"),
     ]
     created = []
     for d in dirs:
@@ -112,7 +111,7 @@ def run(workspace):
     result["created"].extend(create_dirs(workspace))
 
     # 2. Create 成绩总表.xlsx
-    p = os.path.join(workspace, "数据", "成绩提取", "成绩总表.xlsx")
+    p = os.path.join(workspace, "data", "personal", "成绩总表.xlsx")
     created = create_excel(p, {"成绩总表": HEADERS["成绩总表"]})
     if created:
         result["created"].append(created)
@@ -120,7 +119,7 @@ def run(workspace):
         result["skipped"].append(p)
 
     # 3. Create 等效分记录.xlsx
-    p = os.path.join(workspace, "数据", "成绩提取", "等效分记录.xlsx")
+    p = os.path.join(workspace, "data", "personal", "等效分记录.xlsx")
     created = create_excel(p, {"等效分记录": HEADERS["等效分记录"]})
     if created:
         result["created"].append(created)
@@ -128,7 +127,7 @@ def run(workspace):
         result["skipped"].append(p)
 
     # 4. Create 单科追踪.xlsx with 6 sheets
-    p = os.path.join(workspace, "数据", "成绩提取", "单科追踪.xlsx")
+    p = os.path.join(workspace, "data", "personal", "单科追踪.xlsx")
     created = create_excel(p, {s: SUBJECT_HEADERS for s in SUBJECT_SHEETS})
     if created:
         result["created"].append(created)
@@ -136,7 +135,7 @@ def run(workspace):
         result["skipped"].append(p)
 
     # 5. Create 波动分析记录.xlsx
-    p = os.path.join(workspace, "数据", "成绩提取", "波动分析记录.xlsx")
+    p = os.path.join(workspace, "data", "personal", "波动分析记录.xlsx")
     created = create_excel(p, {"波动分析记录": HEADERS["波动分析记录"]})
     if created:
         result["created"].append(created)
@@ -144,7 +143,7 @@ def run(workspace):
         result["skipped"].append(p)
 
     # 6. Create 宏观数据_只读.xlsx
-    p = os.path.join(workspace, "数据", "宏观数据", "宏观数据_只读.xlsx")
+    p = os.path.join(workspace, "data", "macro", "宏观数据_只读.xlsx")
     created = create_excel(p, MACRO_SHEETS)
     if created:
         result["created"].append(created)
@@ -152,7 +151,7 @@ def run(workspace):
         result["skipped"].append(p)
 
     # 7. Create 学校招生_只读.xlsx
-    p = os.path.join(workspace, "数据", "学校招生录取情况", "学校招生_只读.xlsx")
+    p = os.path.join(workspace, "data", "school", "学校招生_只读.xlsx")
     created = create_excel(p, SCHOOL_SHEETS)
     if created:
         result["created"].append(created)

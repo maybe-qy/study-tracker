@@ -31,15 +31,15 @@ logs/
 # Claude Code 本地配置
 .claude/
 
-# 工作区数据（运行时生成）
-workspace/
-数据/
-
 # pytest
 .pytest_cache/
 
-# 生成的HTML报告（运行时输出）
-*.html
+# ── 数据层 ──
+# 个人数据（绝不公开）
+data/personal/
 
-# 测试数据
+# 生成的报告（运行时输出）
+output/
+
+# 测试数据（原始录入参考，不公开）
 测试数据/

@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>个人档案 — 学业追踪报告</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, "Microsoft YaHei", sans-serif; background: #f5f7fa; color: #2c3e50; line-height: 1.6; padding: 20px; }
+  .card { max-width: 640px; margin: 0 auto; background: #fff; border-radius: 12px; padding: 32px; box-shadow: 0 2px 12px rgba(0,0,0,.08); }
+  h1 { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+  .date { font-size: 13px; color: #94a3b8; margin-bottom: 24px; }
+  .score-block { text-align: center; padding: 24px 0; border-bottom: 1px solid #e2e8f0; }
+  .score-label { font-size: 14px; color: #64748b; margin-bottom: 4px; }
+  .score-value { font-size: 56px; font-weight: 700; color: #1e40af; }
+  .score-meta { font-size: 14px; color: #64748b; margin-top: 4px; }
+  .score-meta .confidence { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+  .score-meta .confidence-A { background: #dcfce7; color: #166534; }
+  .score-meta .confidence-B { background: #fef9c3; color: #854d0e; }
+  .score-meta .confidence-C { background: #f3f4f6; color: #6b7280; }
+  .score-meta .confidence-D { background: #fee2e2; color: #991b1b; }
+  .error-range { font-size: 13px; color: #94a3b8; margin-top: 8px; }
+  .section { padding: 16px 0; border-bottom: 1px solid #f1f5f9; }
+  .section:last-child { border-bottom: none; }
+  .section-title { font-size: 14px; font-weight: 600; color: #475569; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; font-size: 14px; }
+  .stat-label { color: #64748b; }
+  .stat-value { font-weight: 500; }
+  .stat-value.positive { color: #16a34a; }
+  .stat-value.negative { color: #dc2626; }
+  .trend-up { color: #16a34a; }
+  .trend-down { color: #dc2626; }
+  .trend-flat { color: #f59e0b; }
+  .archive-card { background: #f8fafc; border-radius: 8px; padding: 12px 16px; margin-top: 8px; }
+  .archive-card .hint { font-size: 11px; color: #94a3b8; margin-bottom: 4px; }
+  .archive-card .info { font-size: 14px; color: #475569; }
+  details { margin-top: 24px; }
+  summary { font-size: 13px; color: #94a3b8; cursor: pointer; }
+  .disclaimer { font-size: 12px; color: #94a3b8; margin-top: 12px; padding: 12px; background: #f8fafc; border-radius: 6px; white-space: pre-line; line-height: 1.8; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>个人档案</h1>
+  <div class="date">{{ generated_at }}</div>
+
+  <div class="score-block">
+    <div class="score-label">等效高考分</div>
+    <div class="score-value">{{ equivalent_score }}</div>
+    <div class="score-meta">
+      <span class="confidence confidence-{{ confidence }}">{{ confidence }}级置信度</span>
+      · {{ method }}
+    </div>
+    <div class="error-range">误差区间 [{{ error_lower }}, {{ error_upper }}]</div>
+  </div>
+
+  {% if has_analysis %}
+  <div class="section">
+    <div class="section-title">成绩状态</div>
+    <div class="stat-row">
+      <span class="stat-label">趋势方向</span>
+      <span class="stat-value trend-{{ trend_class }}">{{ trend_arrow }} {{ trend_text }}</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">预测状态</span>
+      <span class="stat-value">{{ prediction_state }}</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">浮动区间</span>
+      <span class="stat-value">[{{ volatility_lower }}, {{ volatility_upper }}]</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">波动幅度 (σ)</span>
+      <span class="stat-value">{{ sigma }}</span>
+    </div>
+    {% if volatility_style and volatility_style != "-" %}
+    <div class="stat-row">
+      <span class="stat-label">波动风格</span>
+      <span class="stat-value">{{ volatility_style }}</span>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if target_university %}
+  <div class="section">
+    <div class="section-title">目标院校</div>
+    <div class="stat-row">
+      <span class="stat-label">{{ target_university }}</span>
+      <span class="stat-value {{ gap_class }}">{{ gap_text }}</span>
+    </div>
+    {% for line in admission_lines %}
+    <div class="stat-row">
+      <span class="stat-label" style="font-size:12px;color:#94a3b8">{{ line.year }}年录取线</span>
+      <span class="stat-value" style="font-size:13px">{{ line.score }}分</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if hierarchy_refs %}
+  <div class="section">
+    <div class="section-title">分数段参照</div>
+    {% for ref in hierarchy_refs %}
+    <div class="stat-row">
+      <span class="stat-label">{{ ref.name }}</span>
+      <span class="stat-value">{{ ref.score }}分（{{ ref.gap }}）</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if personal_info %}
+  <div class="archive-card">
+    <div class="hint">个人信息（仅存档，不参与计算）</div>
+    <div class="info">{{ personal_info }}</div>
+  </div>
+  {% endif %}
+
+  <details>
+    <summary>查看详细声明</summary>
+    <div class="disclaimer">{{ disclaimer }}</div>
+  </details>
+</div>
+</body>
+</html>

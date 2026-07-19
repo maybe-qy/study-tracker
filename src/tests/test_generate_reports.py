@@ -57,9 +57,11 @@ def test_prediction_state():
 
 def test_eval_labels():
     scores = [640, 650, 660, 655, 670, 665, 680, 690]
-    labels = eval_labels(scores)
+    labels, sequence = eval_labels(scores)
     assert labels is not None
+    assert sequence is not None
     assert labels["积极"] + labels["正常"] + labels["消极"] == len(scores) - 3
+    assert len(sequence) == len(scores) - 3
 
 
 def test_load_data_empty(tmpdir):
@@ -103,7 +105,7 @@ def test_generate_reports_with_data(tmpdir):
 
     # Add macro data manually for testing
     from openpyxl import Workbook
-    macro_path = os.path.join(ws, "数据", "宏观数据", "宏观数据_只读.xlsx")
+    macro_path = os.path.join(ws, "data", "macro", "宏观数据_只读.xlsx")
     wb = Workbook()
     ws1 = wb.active
     ws1.title = "一分一段表"

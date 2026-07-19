@@ -178,7 +178,7 @@ def create_md(workspace, data):
     )
 
     safe_name = f"{data['exam_date']}_{data['exam_name']}".replace("/", "_").replace("\\", "_")
-    md_dir = os.path.join(workspace, "数据", "个体数据")
+    md_dir = os.path.join(workspace, "data", "personal", "individual")
     os.makedirs(md_dir, exist_ok=True)
     md_path = os.path.join(md_dir, f"{safe_name}.md")
     with open(md_path, "w", encoding="utf-8") as f:
@@ -186,9 +186,55 @@ def create_md(workspace, data):
     return md_path
 
 
+def update_subject_tracking(workspace, data):
+    """Append one row per subject to 单科追踪.xlsx."""
+    tracking_path = os.path.join(workspace, "data", "personal", "单科追踪.xlsx")
+    if not os.path.exists(tracking_path):
+        return
+
+    wb = load_workbook(tracking_path)
+
+    # Map subject names to sheet names
+    subjects = [
+        ("语文追踪", "语文", data.get("cn_score"), None, "B"),
+        ("数学追踪", "数学", data.get("math_score"), None, "B"),
+        ("英语追踪", "英语", data.get("en_score"), None, "B"),
+    ]
+
+    # Determine 选科 names — use the same logic for consistency
+    for i in range(1, 4):
+        sub_name = data.get(f"sub{i}_name")
+        sub_raw = data.get(f"sub{i}_raw")
+        sub_assigned = data.get(f"sub{i}_assigned")
+        sub_conf = data.get(f"sub{i}_confidence") or "B"
+        sheet_name = f"选科{i}追踪"
+        subjects.append((sheet_name, sub_name, sub_raw, sub_assigned, sub_conf))
+
+    for sheet_name, subject_name, raw_val, assigned_val, conf_val in subjects:
+        if raw_val is None or raw_val == "":
+            continue
+        if sheet_name not in wb.sheetnames:
+            continue
+
+        ws = wb[sheet_name]
+        ws.append([
+            data.get("exam_name", ""),
+            data.get("exam_date", ""),
+            raw_val,
+            assigned_val if assigned_val else "",
+            conf_val if conf_val else "",
+            "",  # 动态分 — computed by generate_reports
+            "",  # 最高分 — computed later
+            "",  # 最低分
+            "",  # 趋势方向
+        ])
+
+    wb.save(tracking_path)
+
+
 def run(data):
     workspace = os.path.abspath(data["workspace"])
-    excel_path = os.path.join(workspace, "数据", "成绩提取", "成绩总表.xlsx")
+    excel_path = os.path.join(workspace, "data", "personal", "成绩总表.xlsx")
 
     if not os.path.exists(excel_path):
         return {"status": "error", "reason": f"成绩总表.xlsx 不存在，请先运行 setup_workspace.py"}
@@ -198,6 +244,9 @@ def run(data):
     row = build_row(data)
     ws.append(row)
     wb.save(excel_path)
+
+    # Also update 单科追踪.xlsx
+    update_subject_tracking(workspace, data)
 
     md_path = create_md(workspace, data)
 

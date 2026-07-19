@@ -98,7 +98,7 @@ def test_record_exam_end_to_end(tmpdir):
 
     # Verify Excel has the data
     from openpyxl import load_workbook
-    wb = load_workbook(os.path.join(ws, "数据", "成绩提取", "成绩总表.xlsx"))
+    wb = load_workbook(os.path.join(ws, "data", "personal", "成绩总表.xlsx"))
     ws2 = wb["成绩总表"]
     assert ws2.max_row == 2
     assert ws2.cell(2, 1).value == "高一期末"
