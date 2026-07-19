@@ -1,0 +1,45 @@
+# 环境变量与密钥
+.env
+*.key
+*.pem
+credentials.json
+secrets.*
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# 依赖
+node_modules/
+
+# 日志
+logs/
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# 参考书/大文件
+资料/
+
+# Claude Code 本地配置
+.claude/
+
+# 工作区数据（运行时生成）
+workspace/
+数据/
+
+# pytest
+.pytest_cache/
+
+# 生成的HTML报告（运行时输出）
+*.html
+
+# 测试数据
+测试数据/
