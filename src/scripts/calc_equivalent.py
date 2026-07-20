@@ -4,15 +4,14 @@
 Priority order (by data availability, not fixed ranking):
   1. 百分位排名锚定法 (Percentile anchoring) — A级
   1. 等比例放缩法/分数线对照法 (Score-line comparison) — A级（并列）
-  2. 校内排名对照法 (School ranking lookup) — C级
-  3. 校排名估算 (School rank estimation) — C级
+  2. 校内排名对照法 (School ranking lookup) — B级
 
 Confidence is determined by data source and method, not grade.
 Grade limitations (knowledge coverage) are noted separately in reports,
 not in the confidence system.
 
 Input: JSON via stdin
-Output: JSON with primary method, score, confidence, error range, cross-validations
+Output: JSON with weighted score, confidence, error range, cross-validations
 """
 
 import json
@@ -87,7 +86,7 @@ def method_score_line(data, macro):
 
 
 def method_school_lookup(data, macro):
-    """Method 2: 校内排名对照法 — C级."""
+    """Method 2: 校内排名对照法 — B级."""
     school_rank = data.get("school_rank")
     if not school_rank:
         return None
@@ -137,7 +136,7 @@ def method_school_lookup(data, macro):
     return {
         "method": "校内排名对照法",
         "score": round(score, 1),
-        "confidence": "C",
+        "confidence": "B",
         "detail": detail,
     }
 
@@ -195,57 +194,14 @@ def method_percentile(data, macro):
     }
 
 
-def method_school_estimate(data, macro):
-    """Method 4: 校排名估算 — C级."""
-    school_rank = data.get("school_rank")
-    if not school_rank:
-        return None
-
-    school_type = data.get("school_type", "市重点")
-    coefficients = {"省重点": 15, "市重点": 8, "普通高中": 3}
-    coef = coefficients.get(school_type, 8)
-
-    estimated_city_rank = int(school_rank) * coef
-
-    score_table = macro.get("一分一段表", [])
-    if not score_table:
-        return None
-
-    sorted_table = sorted(score_table, key=lambda r: int(r.get("分数", 0)), reverse=True)
-    max_count = max(int(r.get("累计人数", 0)) for r in sorted_table)
-    if max_count == 0:
-        return None
-
-    # Rough estimate: use the estimated city rank to find score
-    target_count = estimated_city_rank
-
-    best_score = None
-    best_diff = float("inf")
-    for row in sorted_table:
-        count = int(row.get("累计人数", 0))
-        diff = abs(count - target_count)
-        if diff < best_diff:
-            best_diff = diff
-            best_score = float(row["分数"])
-
-    if best_score is None:
-        return None
-
-    return {
-        "method": "校排名估算",
-        "score": round(best_score, 1),
-        "confidence": "C",
-        "detail": f"校内排名{school_rank} × {school_type}系数{coef} ≈ 全市{estimated_city_rank}名 → 等效分{best_score:.0f}",
-    }
-
 
 def compute_weighted_score(methods):
     """Compute confidence-weighted average from all available methods.
 
-    Weights: A=1.0, C=0.5, D=0.0
+    Weights: A=1.0, B=0.5, C=0.0
     Returns weighted score or None if no valid methods.
     """
-    weights = {"A": 1.0, "C": 0.5, "D": 0.0}
+    weights = {"A": 1.0, "B": 0.5, "C": 0.0}
     total_weight = sum(weights.get(m["confidence"], 0) for m in methods)
     if total_weight == 0:
         return None
@@ -256,7 +212,7 @@ def compute_weighted_score(methods):
 def compute_error_range(primary, cross_validations):
     """Calculate error range based on cross-validation spread."""
     if not cross_validations:
-        default_margin = {"A": 5, "C": 15, "D": 20}
+        default_margin = {"A": 5, "B": 15, "C": 20}
         margin = default_margin.get(primary["confidence"], 10)
         return {
             "lower": round(primary["score"] - margin, 1),
@@ -278,7 +234,7 @@ def compute_error_range(primary, cross_validations):
 
 def compute_weighted_error(methods, weighted_score):
     """Compute error range from confidence-weighted standard deviation across methods."""
-    weights_map = {"A": 1.0, "C": 0.5, "D": 0.0}
+    weights_map = {"A": 1.0, "B": 0.5, "C": 0.0}
     weights = [weights_map.get(m["confidence"], 0) for m in methods]
     total_weight = sum(weights)
     if total_weight == 0 or len(methods) < 2:
@@ -299,7 +255,7 @@ def run(data):
 
     methods = []
 
-    # Try all methods — A-level methods first, then C-level
+    # Try all methods — A-level methods first, then B-level
     result = method_percentile(data, macro)
     if result:
         methods.append(result)
@@ -312,10 +268,6 @@ def run(data):
     if result:
         methods.append(result)
 
-    result = method_school_estimate(data, macro)
-    if result:
-        methods.append(result)
-
     if not methods:
         return {
             "status": "insufficient_data",
@@ -324,6 +276,7 @@ def run(data):
 
     primary = methods[0]  # Highest priority method
     weighted_score = compute_weighted_score(methods)
+    weights_map = {"A": 1.0, "B": 0.5, "C": 0.0}
 
     # Full method details (all methods with weights, for transparency)
     method_details = []
@@ -332,9 +285,20 @@ def run(data):
             "method": m["method"],
             "score": m["score"],
             "confidence": m["confidence"],
-            "weight": 1.0 if m["confidence"] == "A" else 0.5 if m["confidence"] == "C" else 0.0,
+            "weight": weights_map.get(m["confidence"], 0),
             "detail": m.get("detail", ""),
         })
+
+    # Build calculation_detail: show weighted fusion when multiple methods
+    if len(methods) == 1:
+        calculation_detail = primary.get("detail", "")
+    else:
+        parts = []
+        for m in methods:
+            w = weights_map.get(m["confidence"], 0)
+            parts.append(f"{m['method']}{m['score']}分(w={w})")
+        total_w = sum(weights_map.get(m["confidence"], 0) for m in methods)
+        calculation_detail = "加权融合: (" + " + ".join(parts) + f")/{total_w} = {weighted_score}分"
 
     # Cross-validations: supplementary methods only (vs primary)
     cross_validations = []
@@ -368,8 +332,24 @@ def run(data):
             divergence = "high"
 
     # Determine overall confidence: highest among available methods
-    conf_order = {"A": 3, "C": 2, "D": 1}
+    conf_order = {"A": 3, "B": 2, "C": 1}
     best_confidence = max(methods, key=lambda m: conf_order.get(m["confidence"], 0))["confidence"]
+
+    # ── 数据一致性校验 ──
+    warnings = []
+    user_total = data.get("city_total") or data.get("alliance_total")
+    if user_total:
+        user_total = int(user_total)
+        score_table = macro.get("一分一段表", [])
+        if score_table:
+            max_count = max(int(r.get("累计人数", 0)) for r in score_table)
+            if max_count > 0 and user_total > 0:
+                ratio = abs(user_total - max_count) / max(max_count, user_total)
+                if ratio > 0.10:
+                    warnings.append(
+                        f"考试总人数({user_total})与一分一段表基数({max_count})差异{ratio:.0%}，"
+                        "等效分可能存在偏差"
+                    )
 
     result = {
         "status": "ok",
@@ -378,13 +358,13 @@ def run(data):
         "confidence": best_confidence,
         "error_lower": error_lower,
         "error_upper": error_upper,
-        "calculation_detail": primary.get("detail", ""),
+        "calculation_detail": calculation_detail,
         "method_count": len(methods),
         "method_details": method_details,
         "cross_validations": cross_validations,
         "trust_note": trust_note,
         "divergence": divergence,
-        "warnings": [],
+        "warnings": warnings,
     }
     return result
 

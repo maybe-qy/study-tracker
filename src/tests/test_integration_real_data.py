@@ -188,16 +188,16 @@ def test_record_exam_final():
             "sub1_name": "物理",
             "sub1_raw": 79.5,
             "sub1_assigned": 89,
-            "sub1_confidence": "C",
+            "sub1_confidence": "B",
             "sub2_name": "化学",
             "sub2_raw": 74,
             "sub2_assigned": 93,
-            "sub2_confidence": "C",
+            "sub2_confidence": "B",
             "sub3_name": "技术",
             "sub3_raw": 66,
-            "sub3_confidence": "D",
+            "sub3_confidence": "C",
             "special_line": 286.5,  # 450-point scale special line
-            "notes": "选科无独立划线;C级置信度;总分=语数英314(450制)",
+            "notes": "选科无独立划线;B级置信度;总分=语数英314(450制)",
         }
 
         result = record_exam(data)
@@ -301,9 +301,9 @@ def test_full_pipeline():
             "grade": "高一",
             "total_score": 314,
             "cn_score": 98.5, "math_score": 111, "en_score": 104.5,
-            "sub1_name": "物理", "sub1_raw": 79.5, "sub1_assigned": 89, "sub1_confidence": "C",
-            "sub2_name": "化学", "sub2_raw": 74, "sub2_assigned": 93, "sub2_confidence": "C",
-            "sub3_name": "技术", "sub3_raw": 66, "sub3_confidence": "D",
+            "sub1_name": "物理", "sub1_raw": 79.5, "sub1_assigned": 89, "sub1_confidence": "B",
+            "sub2_name": "化学", "sub2_raw": 74, "sub2_assigned": 93, "sub2_confidence": "B",
+            "sub3_name": "技术", "sub3_raw": 66, "sub3_confidence": "C",
             "special_line": 286.5,
         })
         assert r2["status"] == "ok"

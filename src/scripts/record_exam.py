@@ -206,7 +206,7 @@ def update_subject_tracking(workspace, data):
         sub_name = data.get(f"sub{i}_name")
         sub_raw = data.get(f"sub{i}_raw")
         sub_assigned = data.get(f"sub{i}_assigned")
-        sub_conf = data.get(f"sub{i}_confidence") or "C"
+        sub_conf = data.get(f"sub{i}_confidence") or "B"
         sheet_name = f"选科{i}追踪"
         subjects.append((sheet_name, sub_name, sub_raw, sub_assigned, sub_conf))
 

@@ -25,14 +25,14 @@ DISCLAIMER = """声明与局限性
 1. 等效分方法：
    百分位排名锚定法和等比例放缩法（分数线对照法）均为A级置信度，
    基于省级官方数据（一分一段表/特控线），按数据可用性触发。
-   校内排名对照法和校排名估算为C级置信度。
+   校内排名对照法为B级置信度。
    等效分仅供参考，不构成对高考成绩的预测。
 
 2. 置信度分级：
    A级：排名锚定法（需全市排名+一分一段表）；等比例放缩法（需特控线）。
-   C级：校内排名对照法；校排名估算。
-   D级：无排名无分数线分数。
-   A级权重1.0，C级权重0.5，D级不参与。
+   B级：校内排名对照法（需本校对照表+校内排名）。
+   C级：无排名无分数线分数。
+   A级权重1.0，B级权重0.5，C级不参与。
 
 3. 年级说明：
    等效分置信度由数据来源和方法决定，与年级无关。
@@ -103,17 +103,17 @@ def load_data(workspace):
 
 # ─── HTML generation helpers ──────────────────────────────────────────
 
-CONFIDENCE_WEIGHTS = {"A": 1.0, "C": 0.5, "D": 0.0}
+CONFIDENCE_WEIGHTS = {"A": 1.0, "B": 0.5, "C": 0.0}
 
 
 def filter_weighted(records):
-    """Extract (score, weight) tuples from equivalent score records, excluding D-level."""
+    """Extract (score, weight) tuples from equivalent score records, excluding C-level."""
     weighted = []
     for r in records:
         conf = str(r.get("置信度", "A")).strip()
         weight = CONFIDENCE_WEIGHTS.get(conf, 1.0)
         if weight > 0:
-            score = float(r.get("等效分（主结果）", 0) or 0)
+            score = float(r.get("等效分（融合结果）", 0) or 0)
             if score > 0:
                 weighted.append((score, weight))
     return weighted
@@ -300,7 +300,7 @@ def render_personal(data, env):
         )
 
     latest = eq_records[-1]
-    eq_scores = [float(r.get("等效分（主结果）", 0) or 0) for r in eq_records if r.get("等效分（主结果）")]
+    eq_scores = [float(r.get("等效分（融合结果）", 0) or 0) for r in eq_records if r.get("等效分（融合结果）")]
     weighted = filter_weighted(eq_records)
 
     trend_class, trend_arrow, trend_text = compute_trend(eq_scores)
@@ -368,7 +368,7 @@ def render_personal(data, env):
     template = env.get_template("report_personal.html")
     return template.render(
         generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
-        equivalent_score=f"{float(latest['等效分（主结果）']):.0f} 分" if latest.get("等效分（主结果）") else "暂无",
+        equivalent_score=f"{float(latest['等效分（融合结果）']):.0f} 分" if latest.get("等效分（融合结果）") else "暂无",
         confidence=latest.get("置信度", "-"),
         method=latest.get("主计算方法", "-"),
         error_lower=latest.get("误差区间下限", "-"),
@@ -418,12 +418,12 @@ def render_trend(data, env):
         exams.append({
             "date": r.get("日期", "-"),
             "name": r.get("考试名", "-"),
-            "score": r.get("等效分（主结果）", "-"),
+            "score": r.get("等效分（融合结果）", "-"),
             "confidence": r.get("置信度", "-"),
             "method": r.get("主计算方法", "-"),
         })
 
-    eq_scores = [float(r["等效分（主结果）"]) for r in eq_records if r.get("等效分（主结果）")]
+    eq_scores = [float(r["等效分（融合结果）"]) for r in eq_records if r.get("等效分（融合结果）")]
     weighted = filter_weighted(eq_records)
     trend_class, trend_arrow, trend_text = compute_trend(eq_scores)
     sigma, vol_low, vol_high = compute_volatility_weighted(weighted)
@@ -436,7 +436,7 @@ def render_trend(data, env):
     for r in eq_records:
         if r.get("交叉验证方法1") and r.get("交叉验证分1"):
             diff = None
-            primary = float(r.get("等效分（主结果）", 0)) if r.get("等效分（主结果）") else None
+            primary = float(r.get("等效分（融合结果）", 0)) if r.get("等效分（融合结果）") else None
             cv_score = float(r["交叉验证分1"])
             if primary:
                 diff = f"{cv_score - primary:+.1f}"

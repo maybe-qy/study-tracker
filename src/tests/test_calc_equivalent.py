@@ -80,7 +80,7 @@ def test_method_percentile(tmpdir):
 
 
 def test_method_school_lookup(tmpdir):
-    """Test 校内排名对照法 — with weighted blending from school_estimate."""
+    """Test 校内排名对照法 (B级)."""
     ws = make_macro_ws(tmpdir)
     data = {
         "workspace": ws,
@@ -91,11 +91,9 @@ def test_method_school_lookup(tmpdir):
     result = run(data)
     assert result["status"] == "ok"
     assert result["primary_method"] == "校内排名对照法"
-    assert result["confidence"] == "C"
-    # Both school_lookup (~670) and school_estimate (~720) are C-level
-    # Weighted avg: (670×0.5 + 720×0.5) / 1.0 ≈ 695
-    assert abs(result["equivalent_score"] - 695) < 10
-    assert result["method_count"] == 2
+    assert result["confidence"] == "B"
+    assert abs(result["equivalent_score"] - 670) < 10
+    assert result["method_count"] == 1
 
 
 def make_macro_ws_no_lookup(tmpdir):
@@ -116,8 +114,8 @@ def make_macro_ws_no_lookup(tmpdir):
     return ws_root
 
 
-def test_method_school_estimate(tmpdir):
-    """Test 校排名估算 (C级) — no lookup table available."""
+def test_school_rank_no_lookup_insufficient(tmpdir):
+    """校排名无对照表时，等效分不可用（校排名估算已删除）."""
     ws = make_macro_ws_no_lookup(tmpdir)
     data = {
         "workspace": ws,
@@ -126,8 +124,7 @@ def test_method_school_estimate(tmpdir):
         "school_type": "市重点",
     }
     result = run(data)
-    assert result["status"] == "ok"
-    assert result["confidence"] == "C"
+    assert result["status"] == "insufficient_data"
 
 
 def test_cross_validation(tmpdir):
