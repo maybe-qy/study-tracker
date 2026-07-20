@@ -23,21 +23,25 @@ from jinja2 import Environment, FileSystemLoader
 DISCLAIMER = """声明与局限性
 
 1. 等效分方法：
-   优先使用百分位排名锚定法，基于全市排名+一分一段表。
-   校内排名对照法在有本校历届高考数据时使用。
-   等比例放缩法（分数线对照法）作为无排名时的降级方案。
+   百分位排名锚定法和等比例放缩法（分数线对照法）均为A级置信度，
+   基于省级官方数据（一分一段表/特控线），按数据可用性触发。
+   校内排名对照法和校排名估算为C级置信度。
    等效分仅供参考，不构成对高考成绩的预测。
 
 2. 置信度分级：
-   A级：高三全市统考排名锚定等效分；全市统一赋分（用户确认来源）。
-   B级：高二全市统考排名锚定等效分；语数英原始分（所有年级）。
-   C级：校排名折算等效分；等比例放缩法等效分。
-   D级：无排名无分数线分数；高一等效分尝试。
-   A级权重1.0，B级权重0.8，C级权重0.5，D级不参与。
+   A级：排名锚定法（需全市排名+一分一段表）；等比例放缩法（需特控线）。
+   C级：校内排名对照法；校排名估算。
+   D级：无排名无分数线分数。
+   A级权重1.0，C级权重0.5，D级不参与。
 
-3. 数据来源：用户上传。
+3. 年级说明：
+   等效分置信度由数据来源和方法决定，与年级无关。
+   年级影响的是知识范围覆盖度（等效分对高考的预测效度），
+   而非等效分计算本身的可靠性。高一年级若需提示此差异，见单次报告说明。
 
-4. 个人信息：MBTI、职业偏好等信息仅存档展示，不参与任何分数计算或分析。"""
+4. 数据来源：用户上传。
+
+5. 个人信息：MBTI、职业偏好等信息仅存档展示，不参与任何分数计算或分析。"""
 
 
 def read_sheet_dicts(ws):
@@ -99,7 +103,7 @@ def load_data(workspace):
 
 # ─── HTML generation helpers ──────────────────────────────────────────
 
-CONFIDENCE_WEIGHTS = {"A": 1.0, "B": 0.8, "C": 0.5, "D": 0.0}
+CONFIDENCE_WEIGHTS = {"A": 1.0, "C": 0.5, "D": 0.0}
 
 
 def filter_weighted(records):
@@ -489,14 +493,14 @@ def render_subject(data, env, subject_name, sheet_name):
             # Main subjects
             if subject_name in ("语文", "数学", "英语"):
                 raw = exam.get(subject_name)
-                conf = "B"  # 语数英原始分 → B级
+                conf = "A"  # 语数英原始分
             else:
                 # Check 选科 columns
                 for i in range(1, 4):
                     if str(exam.get(f"选科{i}名称", "")) == subject_name:
                         raw = exam.get(f"选科{i}原始分")
                         assigned = exam.get(f"选科{i}赋分")
-                        conf = exam.get(f"选科{i}赋分置信度") or "B"
+                        conf = exam.get(f"选科{i}赋分置信度") or "A"
                         break
 
             if raw is None or raw == "":

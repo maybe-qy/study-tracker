@@ -196,9 +196,9 @@ def update_subject_tracking(workspace, data):
 
     # Map subject names to sheet names
     subjects = [
-        ("语文追踪", "语文", data.get("cn_score"), None, "B"),
-        ("数学追踪", "数学", data.get("math_score"), None, "B"),
-        ("英语追踪", "英语", data.get("en_score"), None, "B"),
+        ("语文追踪", "语文", data.get("cn_score"), None, "A"),
+        ("数学追踪", "数学", data.get("math_score"), None, "A"),
+        ("英语追踪", "英语", data.get("en_score"), None, "A"),
     ]
 
     # Determine 选科 names — use the same logic for consistency
@@ -206,7 +206,7 @@ def update_subject_tracking(workspace, data):
         sub_name = data.get(f"sub{i}_name")
         sub_raw = data.get(f"sub{i}_raw")
         sub_assigned = data.get(f"sub{i}_assigned")
-        sub_conf = data.get(f"sub{i}_confidence") or "B"
+        sub_conf = data.get(f"sub{i}_confidence") or "C"
         sheet_name = f"选科{i}追踪"
         subjects.append((sheet_name, sub_name, sub_raw, sub_assigned, sub_conf))
 

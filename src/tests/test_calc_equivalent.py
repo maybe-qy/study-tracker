@@ -59,7 +59,7 @@ def test_method_score_line(tmpdir):
     result = run(data)
     assert result["status"] == "ok"
     assert result["primary_method"] == "分数线对照法"
-    assert result["confidence"] == "C"
+    assert result["confidence"] == "A"
     assert 660 <= result["equivalent_score"] <= 680
     assert result["error_lower"] <= result["equivalent_score"] <= result["error_upper"]
 
@@ -80,7 +80,7 @@ def test_method_percentile(tmpdir):
 
 
 def test_method_school_lookup(tmpdir):
-    """Test 校内排名对照法."""
+    """Test 校内排名对照法 — with weighted blending from school_estimate."""
     ws = make_macro_ws(tmpdir)
     data = {
         "workspace": ws,
@@ -92,7 +92,10 @@ def test_method_school_lookup(tmpdir):
     assert result["status"] == "ok"
     assert result["primary_method"] == "校内排名对照法"
     assert result["confidence"] == "C"
-    assert abs(result["equivalent_score"] - 670) < 5  # 50th rank ≈ 670
+    # Both school_lookup (~670) and school_estimate (~720) are C-level
+    # Weighted avg: (670×0.5 + 720×0.5) / 1.0 ≈ 695
+    assert abs(result["equivalent_score"] - 695) < 10
+    assert result["method_count"] == 2
 
 
 def make_macro_ws_no_lookup(tmpdir):
@@ -196,7 +199,7 @@ def test_rank_exceeds_total(tmpdir):
 
 
 def test_percentile_gaoer(tmpdir):
-    """Test that 高二 gets B-level confidence for percentile."""
+    """Test that 高二 percentile anchoring still gets A-level (grade no longer affects confidence)."""
     ws = make_macro_ws(tmpdir)
     data = {
         "workspace": ws,
@@ -208,11 +211,11 @@ def test_percentile_gaoer(tmpdir):
     result = run(data)
     assert result["status"] == "ok"
     assert result["primary_method"] == "排名锚定法"
-    assert result["confidence"] == "B"
+    assert result["confidence"] == "A"
 
 
-def test_grade_blocked_gaoyi(tmpdir):
-    """Test that 高一 returns grade_blocked."""
+def test_gaoyi_no_longer_blocked(tmpdir):
+    """Test that 高一 with ranking data now calculates equivalent score (grade no longer blocks)."""
     ws = make_macro_ws(tmpdir)
     data = {
         "workspace": ws,
@@ -222,7 +225,8 @@ def test_grade_blocked_gaoyi(tmpdir):
         "grade": "高一",
     }
     result = run(data)
-    assert result["status"] == "grade_blocked"
+    assert result["status"] == "ok"
+    assert result["confidence"] == "A"
 
 
 def test_percentile_beats_score_line(tmpdir):

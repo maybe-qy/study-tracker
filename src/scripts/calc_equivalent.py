@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 """Calculate equivalent Gaokao score using all available methods.
 
-Priority order:
-  1. 百分位排名锚定法 (Percentile anchoring) — A级(高三)/B级(高二)
+Priority order (by data availability, not fixed ranking):
+  1. 百分位排名锚定法 (Percentile anchoring) — A级
+  1. 等比例放缩法/分数线对照法 (Score-line comparison) — A级（并列）
   2. 校内排名对照法 (School ranking lookup) — C级
-  3. 等比例放缩法/分数线对照法 (Score-line comparison) — C级
-  4. 校排名估算 (School rank estimation) — C级
+  3. 校排名估算 (School rank estimation) — C级
 
-Grade adaptation:
-  - 高三: normal equivalent score calculation
-  - 高二: city-wide exam scores downgraded to B-level
-  - 高一: no equivalent score, grade_blocked status returned
+Confidence is determined by data source and method, not grade.
+Grade limitations (knowledge coverage) are noted separately in reports,
+not in the confidence system.
 
 Input: JSON via stdin
 Output: JSON with primary method, score, confidence, error range, cross-validations
@@ -47,7 +46,7 @@ def read_macro_data(workspace):
 
 
 def method_score_line(data, macro):
-    """Method 3: 分数线对照法（等比例放缩）— C级."""
+    """Method 1b: 分数线对照法（等比例放缩）— A级，与排名锚定法并列."""
     special_line_exam = data.get("special_line_exam")
     if not special_line_exam:
         return None
@@ -56,12 +55,15 @@ def method_score_line(data, macro):
     if not special_lines:
         return None
 
-    # Find the most recent gaokao special line
+    # Find the most recent gaokao special line (by year)
     gaokao_sl = None
+    latest_year = -1
     for sl in special_lines:
         if sl.get("特控线分数"):
-            gaokao_sl = float(sl["特控线分数"])
-            break
+            year = int(sl.get("年份", 0))
+            if year > latest_year:
+                latest_year = year
+                gaokao_sl = float(sl["特控线分数"])
 
     if not gaokao_sl:
         return None
@@ -71,7 +73,7 @@ def method_score_line(data, macro):
         return {
             "method": "分数线对照法",
             "score": 750.0,
-            "confidence": "C",
+            "confidence": "A",
             "detail": f"满分750 → 等效分750",
         }
 
@@ -79,7 +81,7 @@ def method_score_line(data, macro):
     return {
         "method": "分数线对照法",
         "score": round(es, 1),
-        "confidence": "C",
+        "confidence": "A",
         "detail": f"等效分 = (750-{gaokao_sl})/(750-{special_line_exam})×({total_score}-{special_line_exam})+{gaokao_sl} = {es:.1f}",
     }
 
@@ -140,8 +142,8 @@ def method_school_lookup(data, macro):
     }
 
 
-def method_percentile(data, macro, grade="高三"):
-    """Method 1: 百分位排名锚定法 — A级(高三)/B级(高二)."""
+def method_percentile(data, macro):
+    """Method 1a: 百分位排名锚定法 — A级."""
     rank = data.get("city_rank") or data.get("alliance_rank")
     total = data.get("city_total") or data.get("alliance_total")
 
@@ -185,11 +187,10 @@ def method_percentile(data, macro, grade="高三"):
         return None
 
     source = "全市排名" if data.get("city_rank") else "联盟排名"
-    confidence = "A" if grade == "高三" else "B"
     return {
         "method": "排名锚定法",
         "score": round(best_score, 1),
-        "confidence": confidence,
+        "confidence": "A",
         "detail": f"{source}{rank}/{total} → 百分位{percentile:.3f} → 等效分{best_score:.0f}",
     }
 
@@ -238,10 +239,24 @@ def method_school_estimate(data, macro):
     }
 
 
+def compute_weighted_score(methods):
+    """Compute confidence-weighted average from all available methods.
+
+    Weights: A=1.0, C=0.5, D=0.0
+    Returns weighted score or None if no valid methods.
+    """
+    weights = {"A": 1.0, "C": 0.5, "D": 0.0}
+    total_weight = sum(weights.get(m["confidence"], 0) for m in methods)
+    if total_weight == 0:
+        return None
+    weighted_sum = sum(m["score"] * weights.get(m["confidence"], 0) for m in methods)
+    return round(weighted_sum / total_weight, 1)
+
+
 def compute_error_range(primary, cross_validations):
     """Calculate error range based on cross-validation spread."""
     if not cross_validations:
-        default_margin = {"A": 5, "B": 8, "C": 15, "D": 20}
+        default_margin = {"A": 5, "C": 15, "D": 20}
         margin = default_margin.get(primary["confidence"], 10)
         return {
             "lower": round(primary["score"] - margin, 1),
@@ -261,6 +276,17 @@ def compute_error_range(primary, cross_validations):
     }
 
 
+def compute_weighted_error(methods, weighted_score):
+    """Compute error range from confidence-weighted standard deviation across methods."""
+    weights_map = {"A": 1.0, "C": 0.5, "D": 0.0}
+    weights = [weights_map.get(m["confidence"], 0) for m in methods]
+    total_weight = sum(weights)
+    if total_weight == 0 or len(methods) < 2:
+        return 5.0  # default margin for single method
+    variance = sum(w * (m["score"] - weighted_score) ** 2 for m, w in zip(methods, weights)) / total_weight
+    return max(3.0, round(variance ** 0.5 * 1.5, 1))
+
+
 def run(data):
     workspace = os.path.abspath(data.get("workspace", "."))
     macro = read_macro_data(workspace)
@@ -271,28 +297,18 @@ def run(data):
             "reason": "宏观数据_只读.xlsx 不存在，请先完成初始设置",
         }
 
-    grade = str(data.get("grade", "高三"))
-
-    # 高一不计算等效分
-    if grade == "高一":
-        return {
-            "status": "grade_blocked",
-            "reason": "高一阶段不计算等效高考分。知识范围与高考差距大，选科可能未确定。等效分功能将在高三自动启用。",
-            "grade": "高一",
-        }
-
     methods = []
 
-    # Try all methods in priority order
-    result = method_percentile(data, macro, grade)
-    if result:
-        methods.append(result)
-
-    result = method_school_lookup(data, macro)
+    # Try all methods — A-level methods first, then C-level
+    result = method_percentile(data, macro)
     if result:
         methods.append(result)
 
     result = method_score_line(data, macro)
+    if result:
+        methods.append(result)
+
+    result = method_school_lookup(data, macro)
     if result:
         methods.append(result)
 
@@ -303,10 +319,24 @@ def run(data):
     if not methods:
         return {
             "status": "insufficient_data",
-            "reason": "当前数据不足以计算等效分。至少需要以下之一：模考特控线、校内排名+对照表、市/联盟排名+一分一段表。",
+            "reason": "当前数据不足以计算等效分。至少需要以下之一：全市/联盟排名+一分一段表、模考特控线、校内排名+对照表。",
         }
 
-    primary = methods[0]  # Highest priority
+    primary = methods[0]  # Highest priority method
+    weighted_score = compute_weighted_score(methods)
+
+    # Full method details (all methods with weights, for transparency)
+    method_details = []
+    for m in methods:
+        method_details.append({
+            "method": m["method"],
+            "score": m["score"],
+            "confidence": m["confidence"],
+            "weight": 1.0 if m["confidence"] == "A" else 0.5 if m["confidence"] == "C" else 0.0,
+            "detail": m.get("detail", ""),
+        })
+
+    # Cross-validations: supplementary methods only (vs primary)
     cross_validations = []
     for m in methods[1:]:
         diff = round(m["score"] - primary["score"], 1)
@@ -317,26 +347,46 @@ def run(data):
             "difference": diff,
         })
 
-    error = compute_error_range(primary, cross_validations)
+    margin = compute_weighted_error(methods, weighted_score)
+    error_lower = round(weighted_score - margin, 1)
+    error_upper = round(weighted_score + margin, 1)
 
+    # ── 方法分歧处理（三档） ──
     trust_note = None
-    if cross_validations:
-        diffs = [abs(cv["difference"]) for cv in cross_validations]
-        if max(diffs) <= 3:
-            trust_note = "交叉验证差异在±3分以内，等效分可信度较高"
+    divergence = None
+    if len(methods) >= 2:
+        scores = [m["score"] for m in methods]
+        max_diff = max(scores) - min(scores)
+        if max_diff <= 3:
+            trust_note = "交叉验证一致，等效分可信度较高"
+            divergence = "low"
+        elif max_diff <= 5:
+            trust_note = f"方法间存在分歧（最大差异{max_diff:.0f}分），已按置信度加权融合"
+            divergence = "medium"
+        else:
+            trust_note = f"方法分歧较大（最大差异{max_diff:.0f}分），建议补充排名或特控线数据以提高可靠性"
+            divergence = "high"
 
-    return {
+    # Determine overall confidence: highest among available methods
+    conf_order = {"A": 3, "C": 2, "D": 1}
+    best_confidence = max(methods, key=lambda m: conf_order.get(m["confidence"], 0))["confidence"]
+
+    result = {
         "status": "ok",
         "primary_method": primary["method"],
-        "equivalent_score": primary["score"],
-        "confidence": primary["confidence"],
-        "error_lower": error["lower"],
-        "error_upper": error["upper"],
+        "equivalent_score": weighted_score,
+        "confidence": best_confidence,
+        "error_lower": error_lower,
+        "error_upper": error_upper,
         "calculation_detail": primary.get("detail", ""),
+        "method_count": len(methods),
+        "method_details": method_details,
         "cross_validations": cross_validations,
         "trust_note": trust_note,
+        "divergence": divergence,
         "warnings": [],
     }
+    return result
 
 
 def main():
