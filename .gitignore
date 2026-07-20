@@ -35,8 +35,8 @@ logs/
 .pytest_cache/
 
 # ── 数据层 ──
-# 个人数据（绝不公开）
-data/personal/
+# 全部数据不提交
+data/
 
 # 生成的报告（运行时输出）
 output/

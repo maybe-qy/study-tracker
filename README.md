@@ -13,12 +13,12 @@
 
 ### 方式一：Claude Code 市场安装
 ```bash
-/claude add <your-github>/study-tracker
+/claude add maybe-qy/study-tracker
 ```
 
 ### 方式二：手动安装
 ```bash
-git clone https://github.com/<your-username>/study-tracker.git ~/.claude/skills/study-tracker
+git clone https://github.com/maybe-qy/study-tracker.git ~/.claude/skills/study-tracker
 pip install -r requirements.txt
 ```
 

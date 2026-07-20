@@ -58,7 +58,7 @@
 │       ├── 单科追踪.xlsx
 │       └── 波动分析记录.xlsx
 ├── output/                      # 生成的报告（Git忽略）
-└── 基本.md                      # 需求规范
+└── 基本.md                      # 文档索引（指针文件）
 ```
 
 详细的字段定义见 `references/data_schema.md`。
