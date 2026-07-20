@@ -31,7 +31,8 @@ OPTIONAL = [
     "sub2_name", "sub2_raw", "sub2_assigned", "sub2_confidence",
     "sub3_name", "sub3_raw", "sub3_assigned", "sub3_confidence",
     "city_rank", "city_total", "alliance_rank", "alliance_total",
-    "school_rank", "school_total", "special_line", "excellent_line", "notes",
+    "school_rank", "school_total", "special_line", "excellent_line",
+    "score_scale", "notes",
 ]
 
 EXCEL_COLS = [
@@ -43,7 +44,7 @@ EXCEL_COLS = [
     "总分",
     "市/联盟排名", "市/联盟总人数",
     "校排名", "校总人数",
-    "特控线", "优划线", "备注",
+    "特控线", "优划线", "满分制", "备注",
 ]
 
 MD_TEMPLATE = """# {exam_name}
@@ -124,21 +125,24 @@ def build_row(data):
         data.get("school_total"),
         data.get("special_line"),
         data.get("excellent_line"),
+        data.get("score_scale") or 750,
         data.get("notes"),
     ]
 
 
 def create_md(workspace, data):
     """Write immutable markdown record to 个体数据/."""
-    # Calculate sum check
-    subjects = ["cn_score", "math_score", "en_score",
-                "sub1_raw", "sub2_raw", "sub3_raw"]
-    raw_sum = sum(data.get(k, 0) or 0 for k in subjects)
+    # Calculate sum check: 语数英原始分 + 选科赋分（有赋分用赋分，没有用原始分）
+    comparison_sum = (data.get("cn_score") or 0) + (data.get("math_score") or 0) + (data.get("en_score") or 0)
+    for i in range(1, 4):
+        assigned = data.get(f"sub{i}_assigned")
+        raw = data.get(f"sub{i}_raw") or 0
+        comparison_sum += (assigned if assigned else raw)
     total = data["total_score"]
-    if raw_sum and abs(raw_sum - total) > 0.5:
-        check_note = f"各科加总 = {raw_sum}，≠ 总分 {total}（用户确认以总分为准）"
+    if abs(comparison_sum - total) > 0.5:
+        check_note = f"各科加总（选科有赋分用赋分）= {comparison_sum}，≠ 总分 {total}（用户确认以总分为准）"
     else:
-        check_note = f"各科加总 = {raw_sum}，与总分一致"
+        check_note = f"各科加总 = {comparison_sum}，与总分一致"
 
     # Format rank info
     city_alliance_rank = data.get("city_rank") or data.get("alliance_rank") or "-"
@@ -196,9 +200,9 @@ def update_subject_tracking(workspace, data):
 
     # Map subject names to sheet names
     subjects = [
-        ("语文追踪", "语文", data.get("cn_score"), None, "A"),
-        ("数学追踪", "数学", data.get("math_score"), None, "A"),
-        ("英语追踪", "英语", data.get("en_score"), None, "A"),
+        ("语文追踪", "语文", data.get("cn_score"), None, "B"),
+        ("数学追踪", "数学", data.get("math_score"), None, "B"),
+        ("英语追踪", "英语", data.get("en_score"), None, "B"),
     ]
 
     # Determine 选科 names — use the same logic for consistency
@@ -223,10 +227,6 @@ def update_subject_tracking(workspace, data):
             raw_val,
             assigned_val if assigned_val else "",
             conf_val if conf_val else "",
-            "",  # 动态分 — computed by generate_reports
-            "",  # 最高分 — computed later
-            "",  # 最低分
-            "",  # 趋势方向
         ])
 
     wb.save(tracking_path)

@@ -80,7 +80,7 @@ def test_method_percentile(tmpdir):
 
 
 def test_method_school_lookup(tmpdir):
-    """Test 校内排名对照法 (B级)."""
+    """Test 校内排名对照法 (A级)."""
     ws = make_macro_ws(tmpdir)
     data = {
         "workspace": ws,
@@ -91,7 +91,7 @@ def test_method_school_lookup(tmpdir):
     result = run(data)
     assert result["status"] == "ok"
     assert result["primary_method"] == "校内排名对照法"
-    assert result["confidence"] == "B"
+    assert result["confidence"] == "A"
     assert abs(result["equivalent_score"] - 670) < 10
     assert result["method_count"] == 1
 
@@ -115,16 +115,19 @@ def make_macro_ws_no_lookup(tmpdir):
 
 
 def test_school_rank_no_lookup_insufficient(tmpdir):
-    """校排名无对照表时，等效分不可用（校排名估算已删除）."""
+    """校排名无对照表时，走校排名估算(C级)得出等效分."""
     ws = make_macro_ws_no_lookup(tmpdir)
     data = {
         "workspace": ws,
         "total_score": 650,
         "school_rank": 80,
+        "school_total": 500,
         "school_type": "市重点",
     }
     result = run(data)
-    assert result["status"] == "insufficient_data"
+    assert result["status"] == "ok"
+    assert result["primary_method"] == "校排名估算"
+    assert result["confidence"] == "C"
 
 
 def test_cross_validation(tmpdir):
@@ -139,7 +142,7 @@ def test_cross_validation(tmpdir):
     }
     result = run(data)
     assert result["status"] == "ok"
-    assert result["primary_method"] == "排名锚定法"
+    assert result["primary_method"] == "分数线对照法"
     assert len(result["cross_validations"]) >= 1
     assert "trust_note" in result
 
@@ -167,18 +170,18 @@ def test_no_macro_file(tmpdir):
 
 
 def test_priority_order(tmpdir):
-    """Test that priority 1 (percentile) beats priority 3 (score-line)."""
+    """Test that score_line (P1) beats percentile (P3) when both available."""
     ws = make_macro_ws(tmpdir)
     data = {
         "workspace": ws,
         "total_score": 650,
-        "special_line_exam": 546.5,  # enables method 1
-        "alliance_rank": 3200,       # enables method 3
+        "special_line_exam": 546.5,
+        "alliance_rank": 3200,
         "alliance_total": 21000,
     }
     result = run(data)
     assert result["status"] == "ok"
-    assert result["primary_method"] == "排名锚定法"  # priority 1 wins
+    assert result["primary_method"] == "分数线对照法"  # P1 wins over P3
 
 
 def test_rank_exceeds_total(tmpdir):
@@ -226,8 +229,8 @@ def test_gaoyi_no_longer_blocked(tmpdir):
     assert result["confidence"] == "A"
 
 
-def test_percentile_beats_score_line(tmpdir):
-    """Test that percentile method now takes priority over score_line."""
+def test_score_line_beats_percentile(tmpdir):
+    """Test that score_line (P1) takes priority over percentile (P3)."""
     ws = make_macro_ws(tmpdir)
     data = {
         "workspace": ws,
@@ -238,5 +241,5 @@ def test_percentile_beats_score_line(tmpdir):
     }
     result = run(data)
     assert result["status"] == "ok"
-    assert result["primary_method"] == "排名锚定法"
-    assert result["confidence"] == "A"  # default 高三
+    assert result["primary_method"] == "分数线对照法"
+    assert result["confidence"] == "A"

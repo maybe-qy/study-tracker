@@ -24,7 +24,7 @@ HEADERS = {
         "总分",
         "市/联盟排名", "市/联盟总人数",
         "校排名", "校总人数",
-        "特控线", "优划线", "备注",
+        "特控线", "优划线", "满分制", "备注",
     ],
     "等效分记录": [
         "考试名", "日期",
@@ -33,13 +33,6 @@ HEADERS = {
         "交叉验证方法2", "交叉验证分2",
         "误差区间下限", "误差区间上限",
         "目标院校", "目标院校录取线", "差距分数",
-    ],
-    "波动分析记录": [
-        "统计截止日期", "有效数据次数",
-        "等效分均值", "σ",
-        "浮动区间下限", "浮动区间上限",
-        "标签积极次数", "标签正常次数", "标签消极次数",
-        "趋势方向",
     ],
 }
 
@@ -50,7 +43,6 @@ SUBJECT_SHEETS = [
 
 SUBJECT_HEADERS = [
     "考试名", "日期", "原始分", "赋分", "赋分置信度",
-    "动态分", "最高分", "最低分", "趋势方向",
 ]
 
 MACRO_SHEETS = {
@@ -131,15 +123,7 @@ def run(workspace):
     else:
         result["skipped"].append(p)
 
-    # 5. Create 波动分析记录.xlsx
-    p = os.path.join(workspace, "data", "personal", "波动分析记录.xlsx")
-    created = create_excel(p, {"波动分析记录": HEADERS["波动分析记录"]})
-    if created:
-        result["created"].append(created)
-    else:
-        result["skipped"].append(p)
-
-    # 6. Create 宏观数据_只读.xlsx
+    # 5. Create 宏观数据_只读.xlsx
     p = os.path.join(workspace, "data", "macro", "宏观数据_只读.xlsx")
     created = create_excel(p, MACRO_SHEETS)
     if created:
@@ -147,7 +131,7 @@ def run(workspace):
     else:
         result["skipped"].append(p)
 
-    # 7. Create 学校招生_只读.xlsx
+    # 6. Create 学校招生_只读.xlsx
     p = os.path.join(workspace, "data", "school", "学校招生_只读.xlsx")
     created = create_excel(p, SCHOOL_SHEETS)
     if created:

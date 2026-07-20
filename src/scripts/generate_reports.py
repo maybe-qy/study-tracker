@@ -23,21 +23,23 @@ from jinja2 import Environment, FileSystemLoader
 DISCLAIMER = """声明与局限性
 
 1. 等效分方法：
-   百分位排名锚定法和等比例放缩法（分数线对照法）均为A级置信度，
-   基于省级官方数据（一分一段表/特控线），按数据可用性触发。
-   校内排名对照法为B级置信度。
+   优先使用分数线对照法（等比例放缩），基于省级特控线固定锚点。
+   校内排名对照法（有本校高考对照表时）为 A 级。
+   全市/联盟排名锚定法作为交叉验证。
+   校排名估算在仅有校内排名无对照表时使用，C 级。
    等效分仅供参考，不构成对高考成绩的预测。
 
 2. 置信度分级：
-   A级：排名锚定法（需全市排名+一分一段表）；等比例放缩法（需特控线）。
-   B级：校内排名对照法（需本校对照表+校内排名）。
-   C级：无排名无分数线分数。
-   A级权重1.0，B级权重0.5，C级不参与。
+   A级：分数线对照法、校内排名对照法、全市/联盟排名锚定法、全市/联盟统一赋分。
+   B级：主科原始分、全市统考/联盟考试中无独立划线的选科。
+   C级：校排名估算（无本校高考对照数据）。
+   D级：无排名无分数线分数。
+   趋势/波动分析权重：A=1.0, B=0.8, C=0.5, D 不参与。
 
 3. 年级说明：
    等效分置信度由数据来源和方法决定，与年级无关。
    年级影响的是知识范围覆盖度（等效分对高考的预测效度），
-   而非等效分计算本身的可靠性。高一年级若需提示此差异，见单次报告说明。
+   而非等效分计算本身的可靠性。
 
 4. 数据来源：用户上传。
 
@@ -103,7 +105,7 @@ def load_data(workspace):
 
 # ─── HTML generation helpers ──────────────────────────────────────────
 
-CONFIDENCE_WEIGHTS = {"A": 1.0, "B": 0.5, "C": 0.0}
+CONFIDENCE_WEIGHTS = {"A": 1.0, "B": 0.8, "C": 0.5, "D": 0.0}
 
 
 def filter_weighted(records):
@@ -193,10 +195,10 @@ def prediction_state(scores):
     # HP-filter simplified: use EWMA trend
     alpha = 0.3
     ewma = scores[0]
-    for s in scores[1:]:
-        ewma = alpha * s + (1 - alpha) * ewma
-    # Residuals
-    residuals = [scores[i] - (ewma if i == 0 else alpha * scores[i] + (1 - alpha) * scores[i-1]) for i in range(len(scores))]
+    residuals = []
+    for i in range(len(scores)):
+        residuals.append(scores[i] - ewma)
+        ewma = alpha * scores[i] + (1 - alpha) * ewma
     residuals = residuals[1:]  # drop first which is unreliable
     if len(residuals) < 2:
         return "正常"
@@ -218,24 +220,24 @@ def eval_labels(scores):
     labels = {"积极": 0, "正常": 0, "消极": 0}
     sequence = []
     alpha = 0.3
+    sequence = []
+    labels = {"积极": 0, "正常": 0, "消极": 0}
+    # 预热：用前3个点建立EWMA基线
     ewma = scores[0]
-    for s in scores[1:-1]:
+    for s in scores[1:3]:
         ewma = alpha * s + (1 - alpha) * ewma
+    # 从第4个点开始标注（EWMA基于前i个点，当前点用于比较）
     for i in range(3, len(scores)):
-        prior = scores[:i+1]
-        ewma = prior[0]
-        for s in prior[1:-1]:
-            ewma = alpha * s + (1 - alpha) * ewma
-        latest = prior[-1]
-        if latest > ewma + 3:
+        if scores[i] > ewma + 3:
             labels["积极"] += 1
             sequence.append("积极")
-        elif latest < ewma - 3:
+        elif scores[i] < ewma - 3:
             labels["消极"] += 1
             sequence.append("消极")
         else:
             labels["正常"] += 1
             sequence.append("正常")
+        ewma = alpha * scores[i] + (1 - alpha) * ewma
     return (labels, sequence)
 
 
@@ -493,7 +495,7 @@ def render_subject(data, env, subject_name, sheet_name):
             # Main subjects
             if subject_name in ("语文", "数学", "英语"):
                 raw = exam.get(subject_name)
-                conf = "A"  # 语数英原始分
+                conf = "B"  # 语数英原始分
             else:
                 # Check 选科 columns
                 for i in range(1, 4):

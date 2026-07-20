@@ -242,16 +242,11 @@ def test_calc_equivalent_final():
         setup_workspace(tmpdir)
         copy_real_macro_data(tmpdir)
 
-        # Convert 450-scale to 750-scale for the calculation
-        total_450 = 314
-        sl_450 = 286.5
-        total_750 = total_450 * 750 / 450
-        sl_750 = sl_450 * 750 / 450
-
         data = {
             "workspace": tmpdir,
-            "total_score": total_750,
-            "special_line_exam": sl_750,
+            "total_score": 314,
+            "special_line_exam": 286.5,
+            "score_scale": 450,
         }
 
         result = calc_equivalent(data)
@@ -305,6 +300,7 @@ def test_full_pipeline():
             "sub2_name": "化学", "sub2_raw": 74, "sub2_assigned": 93, "sub2_confidence": "B",
             "sub3_name": "技术", "sub3_raw": 66, "sub3_confidence": "C",
             "special_line": 286.5,
+            "score_scale": 450,
         })
         assert r2["status"] == "ok"
 
@@ -344,7 +340,7 @@ def test_cross_validation_both_methods():
 
         result = calc_equivalent(data)
         assert result["status"] == "ok"
-        assert result["primary_method"] == "排名锚定法"
+        assert result["primary_method"] == "分数线对照法"
         assert len(result["cross_validations"]) >= 1
 
         print(f"\n  交叉验证: 主方法={result['primary_method']}, "
