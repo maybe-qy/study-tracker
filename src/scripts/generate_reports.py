@@ -384,12 +384,23 @@ def render_personal(data, env):
             "target_gap": target_gap,
         }
 
+    # Extract calculation detail from latest record
+    latest_calc_detail = ""
+    detail_str = latest.get("详细信息", "")
+    if detail_str:
+        try:
+            detail_obj = json.loads(detail_str)
+            latest_calc_detail = detail_obj.get("calculation_detail", "")
+        except (json.JSONDecodeError, TypeError):
+            pass
+
     template = env.get_template("report_personal.html")
     return template.render(
         generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
         equivalent_score=f"{ewma_score:.0f} 分" if ewma_score else "暂无",
         confidence=latest.get("置信度", "-"),
         method=latest.get("主计算方法", "-"),
+        calc_detail=latest_calc_detail,
         error_lower=latest.get("误差区间下限", "-"),
         error_upper=latest.get("误差区间上限", "-"),
         has_analysis=has_analysis,
