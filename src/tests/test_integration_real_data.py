@@ -210,6 +210,8 @@ def test_record_exam_final():
 
 def test_calc_equivalent_9plus1():
     """Calculate equivalent score for 9+1 exam. Expected: ~627."""
+    if not os.path.exists(REAL_DATA):
+        pytest.skip("测试数据目录不存在")
     tmpdir = tempfile.mkdtemp()
     try:
         setup_workspace(tmpdir)
@@ -237,6 +239,8 @@ def test_calc_equivalent_9plus1():
 
 def test_calc_equivalent_final():
     """Calculate equivalent score for final exam. Expected: ~619."""
+    if not os.path.exists(REAL_DATA):
+        pytest.skip("测试数据目录不存在")
     tmpdir = tempfile.mkdtemp()
     try:
         setup_workspace(tmpdir)
@@ -265,6 +269,8 @@ def test_calc_equivalent_final():
 
 def test_full_pipeline():
     """End-to-end: setup → record both exams → generate reports."""
+    if not os.path.exists(REAL_DATA):
+        pytest.skip("测试数据目录不存在")
     tmpdir = tempfile.mkdtemp()
     try:
         # 1. Setup
@@ -325,6 +331,8 @@ def test_full_pipeline():
 
 def test_cross_validation_both_methods():
     """Test that when both special_line and ranking are available, cross-validation works."""
+    if not os.path.exists(REAL_DATA):
+        pytest.skip("测试数据目录不存在")
     tmpdir = tempfile.mkdtemp()
     try:
         setup_workspace(tmpdir)

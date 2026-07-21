@@ -37,6 +37,8 @@ def read_macro_data(workspace):
     """Read all macro data sheets."""
     path = os.path.join(workspace, "data", "macro", "宏观数据_只读.xlsx")
     if not os.path.exists(path):
+        path = os.path.join(workspace, "data", "macro", "宏观数据.xlsx")
+    if not os.path.exists(path):
         return None
     wb = load_workbook(path, data_only=True)
     data = {}
@@ -245,55 +247,378 @@ def method_school_estimate(data, macro):
     }
 
 
-def read_school_subject_data(macro):
-    """Extract per-subject school-level data from macro sheets.
+def method_two_module(data, macro):
+    """Method 0: 双模块独立换算法 — A/B级，最高优先级.
 
-    Identifies sheets by surviving substring patterns:
-      '富'+'特控' → 特控线, '富' only → 本科线, '本'+'对照'+'总分' → 对照表.
-    Uses positional column access (keys[3]=2028届划线, keys[4]=2028届排名).
+    When school upgrade data (per-subject 特控线+浙大线) is available,
+    splits calculation into two independent modules:
+
+    Module 1 (语数英 450pt): proportional scaling between school cutoffs
+      and gaokao reference targets (特控340, 浙大378).
+
+    Module 2 (选科 100pt each): per-subject proportional scaling.
+      Priority 1: dual-line (特控+浙大) → A级
+      Priority 2: single-line (仅特控) → B级
+      Priority 3: no line → skip (delegated to fallback methods)
+
+    Total = 语数英等效 + sum(选科等效)
+    """
+    # Read upgrade sheet directly (non-standard layout)
+    workspace = os.path.abspath(data.get("workspace", "."))
+    for fname in ("宏观数据_只读.xlsx", "宏观数据.xlsx"):
+        path = os.path.join(workspace, "data", "macro", fname)
+        if os.path.exists(path):
+            break
+    else:
+        return None
+
+    wb = load_workbook(path, data_only=True)
+    ws = None
+    for sn in wb.sheetnames:
+        if "期末" in str(sn) and "升级" in str(sn):
+            ws = wb[sn]
+            break
+    if ws is None:
+        wb.close()
+        return None
+
+    # Parse: find 2028届 cutoffs for all subjects
+    # Two sections: 特控线 and 浙大线, each has rows with 5 cols:
+    # col0=科目, col1=2027划线, col2=2027上线, col3=2028划线, col4=2028上线
+    cutoffs = {}  # {subject: {"special": val, "zd": val or None}}
+    current_section = None  # "special" or "zd"
+
+    for row in ws.iter_rows(min_row=1, values_only=True):
+        if not row:
+            continue
+        text_0 = str(row[0]).strip() if row[0] else ""
+
+        if "特控" in text_0 and "分段" in text_0:
+            current_section = "special"
+            continue
+        if "浙大" in text_0 and "分段" in text_0:
+            current_section = "zd"
+            continue
+        if current_section is None or len(row) < 5:
+            continue
+
+        subj = text_0
+        if subj == "科目" or not subj:
+            continue
+
+        try:
+            line_2028 = float(row[3]) if row[3] is not None else None
+        except (ValueError, TypeError):
+            continue
+
+        if line_2028 is None:
+            continue
+
+        if subj not in cutoffs:
+            cutoffs[subj] = {"special": None, "zd": None}
+        cutoffs[subj][current_section] = line_2028
+
+    wb.close()
+
+    # Need at least 语数英综合 special line
+    main_data = cutoffs.get("语数英综合", {})
+    if main_data.get("special") is None:
+        return None
+
+    # Gaokao reference targets
+    GK_MAIN_SPECIAL = 340  # 语数英特控目标 (330-350 中点)
+    GK_MAIN_ZD = 378       # 语数英浙大目标 (374-383 中点)
+    GK_SUB_SPECIAL = 90    # 选科特控目标 (88-92 中点)
+    GK_SUB_ZD = 96         # 选科浙大目标 (95-97 中点)
+
+    student_score = float(data.get("_original_total_score", data.get("total_score", 0)))
+    score_scale = data.get("score_scale", 750)
+    if score_scale == 750:
+        student_main = student_score * 450 / 750
+    else:
+        student_main = student_score
+
+    details = []
+    total_equivalent = 0.0
+    conf_counts = {"A": 0, "B": 0, "C": 0, "D": 0}  # per-module confidence tally
+
+    # ── Module 1: 语数英 ──
+    sch_special = main_data["special"]
+    sch_zd = main_data.get("zd")
+
+    if sch_zd and student_main >= sch_special:
+        ratio = (student_main - sch_special) / (sch_zd - sch_special)
+        main_eq = GK_MAIN_SPECIAL + (GK_MAIN_ZD - GK_MAIN_SPECIAL) * ratio
+        conf = "A"
+        detail = (f"语数英{student_main:.0f}分, 校特控{sch_special:.0f}/浙大{sch_zd:.0f}"
+                  f" → 线上{ratio:.1%} → 等效{main_eq:.1f}")
+    elif student_main >= sch_special:
+        # Only special line available — single-point scaling
+        ratio = student_main / sch_special
+        main_eq = GK_MAIN_SPECIAL * ratio
+        conf = "B"
+        detail = (f"语数英{student_main:.0f}分, 校特控{sch_special:.0f}(无浙大线)"
+                  f" → 比例{ratio:.1%} → 等效{main_eq:.1f}")
+    else:
+        return None  # Below special line, can't use this method
+
+    main_eq = round(main_eq, 1)
+    total_equivalent += main_eq
+    conf_counts[conf] += 1
+    details.append(f"[语数英] {detail}")
+
+    # ── Module 2: 选科 ──
+    subjects_input = data.get("subjects", [])
+    subj_names_used = {"语数英综合", "语文", "数学", "英语"}
+    for subj in subjects_input:
+        name = subj.get("name", "")
+        if name in ("语文", "数学", "英语"):
+            continue  # handled in module 1
+        raw = subj.get("raw")
+        if raw is None:
+            details.append(f"[{name}] 无原始分, 跳过")
+            continue
+
+        raw = float(raw)
+        sub_cut = cutoffs.get(name, {})
+
+        if sub_cut.get("special") and sub_cut.get("zd") and raw >= sub_cut["special"]:
+            # Priority 1: dual-line
+            ratio = (raw - sub_cut["special"]) / (sub_cut["zd"] - sub_cut["special"])
+            sub_eq = GK_SUB_SPECIAL + (GK_SUB_ZD - GK_SUB_SPECIAL) * ratio
+            conf = "A"
+            detail = (f"{name}{raw:.0f}分, 校特控{sub_cut['special']:.0f}/浙大{sub_cut['zd']:.0f}"
+                      f" → 线上{ratio:.1%} → 等效{sub_eq:.1f}")
+        elif sub_cut.get("special") and raw >= sub_cut["special"]:
+            # Priority 2: single-line
+            ratio = raw / sub_cut["special"]
+            sub_eq = GK_SUB_SPECIAL * ratio
+            conf = "B"
+            detail = (f"{name}{raw:.0f}分, 校特控{sub_cut['special']:.0f}(无浙大线)"
+                      f" → 比例{ratio:.1%} → 等效{sub_eq:.1f}")
+        elif sub_cut.get("special"):
+            # Below special line
+            ratio = raw / sub_cut["special"]
+            sub_eq = GK_SUB_SPECIAL * ratio
+            conf = "C"
+            detail = (f"{name}{raw:.0f}分, 低于校特控{sub_cut['special']:.0f}"
+                      f" → 比例{ratio:.1%} → 等效{sub_eq:.1f}")
+        else:
+            # Priority 3: no school cutoff → try existing single-subject fallbacks
+            assigned = subj.get("assigned")
+            if assigned:
+                sub_eq = float(assigned)
+                conf = subj.get("confidence", "B")
+                detail = f"{name}赋分{assigned}（{conf}级）→ 等效{sub_eq:.0f}分"
+            else:
+                # Try cross-exam fallback
+                prev = _find_previous_subject_data(workspace, name, data.get("exam_name", ""))
+                if prev:
+                    n = prev.get("exams_skipped", 1)
+                    discount = round(0.85 ** n, 3)
+                    sub_eq = round(prev["score"] * discount, 1)
+                    conf = "C"
+                    detail = (f"{name}无校内划线, 回退至{prev['exam']}"
+                              f"（{prev['score']}分×{discount:.2f}={sub_eq}分, C级）")
+                else:
+                    # Use school对照表 or rough estimate
+                    raw = float(subj.get("raw", 0))
+                    sub_eq = round(GK_SUB_SPECIAL * raw / 100, 1) if raw else None
+                    conf = "D"
+                    detail = f"{name}无任何参照数据 → 粗略估算{sub_eq}分(D级)"
+            if sub_eq is None:
+                details.append(f"[{name}] 无任何可用数据, 跳过")
+                continue
+
+        sub_eq = round(sub_eq, 1)
+        total_equivalent += sub_eq
+        conf_counts[conf] += 1
+        details.append(f"[{name}] {detail}")
+
+    total_equivalent = round(total_equivalent, 1)
+
+    # Overall confidence: A if ≥50% modules are A and no module is D
+    total_modules = sum(conf_counts.values())
+    if conf_counts.get("D", 0) > 0:
+        overall_conf = "C"
+    elif conf_counts.get("C", 0) >= 2:
+        overall_conf = "B"
+    elif conf_counts.get("A", 0) >= total_modules * 0.5:
+        overall_conf = "A"
+    elif conf_counts.get("A", 0) + conf_counts.get("B", 0) >= total_modules * 0.5:
+        overall_conf = "B"
+    else:
+        overall_conf = "C"
+
+    return {
+        "method": "双模块换算法",
+        "score": total_equivalent,
+        "confidence": overall_conf,
+        "detail": " | ".join(details),
+    }
+
+
+def method_school_threshold(data, macro):
+    """Method 5: 校排阈值估算法 — B级，交叉验证.
+
+    Reads the升级 Sheet directly (bypasses broken dict-parsing for
+    non-standard sheet layout). Uses school-internal 特控线+浙大线
+    thresholds to estimate school rank → 一分一段表 → equivalent.
+    """
+    workspace = os.path.abspath(data.get("workspace", "."))
+    for fname in ("宏观数据_只读.xlsx", "宏观数据.xlsx"):
+        path = os.path.join(workspace, "data", "macro", fname)
+        if os.path.exists(path):
+            break
+    else:
+        return None
+
+    wb = load_workbook(path, data_only=True)
+
+    # Find upgrade sheet
+    ws = None
+    for sn in wb.sheetnames:
+        if "期末" in str(sn) and "升级" in str(sn):
+            ws = wb[sn]
+            break
+    if ws is None:
+        wb.close()
+        return None
+
+    # Parse with positional access (sheet has title + section header rows)
+    # Data rows: col0=科目, col1=2027划线, col2=2027上线, col3=2028划线, col4=2028上线
+    te_line = None
+    te_rank = None
+    zd_line = None
+    zd_rank = None
+
+    for row in ws.iter_rows(min_row=1, values_only=True):
+        if not row or len(row) < 5:
+            continue
+        subj = str(row[0]).strip() if row[0] else ""
+        if "语数英" not in subj:
+            continue
+        try:
+            line_2028 = float(row[3]) if row[3] is not None else None
+            count_2028 = int(row[4]) if row[4] is not None else None
+        except (ValueError, TypeError):
+            continue
+        if line_2028 is None or count_2028 is None:
+            continue
+
+        if te_line is None:
+            te_line, te_rank = line_2028, count_2028
+        else:
+            zd_line, zd_rank = line_2028, count_2028
+
+    wb.close()
+
+    if te_line is None or zd_line is None:
+        return None
+
+    # Use original score if available (data["total_score"] may be 750-converted)
+    student_score = float(data.get("_original_total_score", data.get("total_score", 0)))
+    score_scale = data.get("score_scale", 750)
+    if score_scale == 750:
+        student_450 = student_score * 450 / 750
+    else:
+        student_450 = student_score
+
+    if not (te_line <= student_450 <= zd_line):
+        return None
+
+    ratio = (student_450 - te_line) / (zd_line - te_line)
+    estimated_rank = int(te_rank - ratio * (te_rank - zd_rank))
+
+    # Get school total from 结构 sheet (default 835)
+    school_total = 835
+    for key in macro:
+        if "期末" in str(key) and "结构" in str(key):
+            for row in macro[key]:
+                vals = list(row.values())
+                if len(vals) >= 2:
+                    text = str(vals[0]) if vals[0] else ""
+                    if "全校" in text:
+                        try:
+                            school_total = int(str(vals[1]).replace("人", "").rstrip("人"))
+                        except (ValueError, TypeError):
+                            pass
+            break
+
+    school_type = data.get("school_type", "省重点")
+    coeff_map = {"省重点": 0.3, "市重点": 0.6, "区重点": 1.0, "普通": 1.5}
+    coeff = coeff_map.get(school_type, 1.0)
+
+    score_table = macro.get("一分一段表", [])
+    if not score_table:
+        return None
+    max_count = max(int(r.get("累计人数", 0)) for r in score_table)
+    if max_count == 0:
+        return None
+
+    estimated_city_rank = int(estimated_rank / school_total * max_count * coeff)
+    estimated_city_rank = min(estimated_city_rank, max_count)
+    percentile = max(0.0, min(1.0, 1.0 - estimated_city_rank / max_count))
+
+    sorted_table = sorted(score_table, key=lambda r: int(r.get("分数", 0)), reverse=True)
+    target_count = int((1 - percentile) * max_count)
+    best_score = None
+    best_diff = float("inf")
+    for row in sorted_table:
+        diff = abs(int(row.get("累计人数", 0)) - target_count)
+        if diff < best_diff:
+            best_diff = diff
+            best_score = float(row["分数"])
+
+    if best_score is None:
+        return None
+
+    return {
+        "method": "校排阈值估算法",
+        "score": round(best_score, 1),
+        "confidence": "B",
+        "detail": f"校内特控线{te_line:.0f}分(=第{te_rank}名), 浙大线{zd_line:.0f}分(=第{zd_rank}名) → 学生{student_450:.0f}分估算校内第{estimated_rank}名 → 等效{best_score:.0f}分",
+    }
+
+
+def read_school_subject_data(macro):
+    """Extract per-subject rank→score mappings from 本校对照表 sheets.
+
+    Only processes sheets whose names contain 本+对照+总分 (excluding
+    the standard 本校对照表_总分 which is handled by method_school_lookup).
+    These are subject-level lookup tables mapping school ranks to gaokao scores.
+    Returns {subject: {rank_scores: {rank: score, ...}}}.
     """
     result = {}
     subject_names = ["语文", "数学", "英语", "物理", "化学", "生物", "技术", "历史", "政治", "地理"]
 
     for sheet_key in macro:
         sname = str(sheet_key)
-        has_fu = "富阳" in sname or "富中" in sname
-        has_te = "特控" in sname
-        has_ben = "本" in sname and "对照" in sname and "总分" in sname
-        has_dui = "对照" in sname
-        has_zong = "总分" in sname
+        if not ("本" in sname and "对照" in sname and "总分" in sname):
+            continue
 
-        # 富阳中学_特控线 or 富阳中学_本科线
-        if has_fu:
-            prefix = "cutoff" if has_te else "benke"
-            for row in macro[sheet_key]:
-                subj = str(list(row.values())[0]).strip() if row else ""
-                if subj not in subject_names:
-                    continue
-                keys = list(row.keys())
-                result.setdefault(subj, {})
-                if len(keys) >= 5:
-                    result[subj][f"{prefix}_2028"] = float(row.get(keys[3], 0) or 0)
-                    result[subj][f"{prefix}_rank_2028"] = int(row.get(keys[4], 0) or 0)
-
-        # 本校对照表_总分
-        if has_ben and has_dui and has_zong:
-            for row in macro[sheet_key]:
-                subj = str(list(row.values())[0]).strip() if row else ""
-                if subj not in subject_names:
-                    continue
-                result.setdefault(subj, {})
-                rank_scores = {}
-                keys = list(row.keys())
-                for k in keys[2:]:  # skip 学科, 参考人数
-                    val = row.get(k)
-                    if val and str(val).replace(".", "").replace("-", "").isdigit():
-                        import re
+        for row in macro[sheet_key]:
+            subj = str(list(row.values())[0]).strip() if row else ""
+            if subj not in subject_names:
+                continue
+            result.setdefault(subj, {})
+            rank_scores = {}
+            keys = list(row.keys())
+            for k in keys[2:]:  # skip 学科, 参考人数
+                val = row.get(k)
+                if val and str(val).replace(".", "").replace("-", "").isdigit():
+                    import re
+                    try:
+                        rank = int(str(k))
+                    except (ValueError, TypeError):
                         m = re.search(r'\d+', str(k))
                         if m:
-                            rank_scores[int(m.group())] = float(val)
-                if rank_scores:
-                    result[subj]["rank_scores"] = rank_scores
+                            rank = int(m.group())
+                        else:
+                            continue
+                    rank_scores[rank] = float(val)
+            if rank_scores:
+                result[subj]["rank_scores"] = rank_scores
 
     return result
 
@@ -301,24 +626,26 @@ def read_school_subject_data(macro):
 def compute_subject_equivalents(data, macro, original_total_score=None):
     """Compute per-subject equivalent scores.
 
-    For 选科 with 赋分: equivalent = 赋分 (already standardized).
-    For 选科 without 赋分: try school lookup, mark data insufficient.
-    For 语数英: use proportion of total equivalent to total score.
+    Two-pass approach:
+    1. Resolve ALL 选科 scores first (赋分直映 → fallback → school lookup).
+    2. Compute 语数英 from the remaining equivalent (total − sum of 选科).
 
-    original_total_score: 原始制总分。450分制考试中，语数英比例计算需使用
-    原始450制总分，而非换算后的750制总分，以保证 ratio = raw/450 而非 raw/750。
-
-    Returns list of {subject, score, confidence, method, detail}.
+    This ensures 语数英 + 选科 ≈ total_equivalent regardless of score scale.
     """
     subjects_input = data.get("subjects", [])
     if not subjects_input:
         return []
 
-    total_score = original_total_score if original_total_score else data.get("total_score", 0)
     total_equivalent = data.get("_total_equivalent", 0)
+    workspace = os.path.abspath(data.get("workspace", "."))
+    exam_name = data.get("exam_name", "")
 
     school_data = read_school_subject_data(macro)
     results = []
+
+    # ── Pass 1: resolve 选科 scores ──
+    sum_assigned = 0.0
+    sum_main_raw = 0.0
 
     for subj in subjects_input:
         name = subj.get("name", "")
@@ -326,53 +653,80 @@ def compute_subject_equivalents(data, macro, original_total_score=None):
         assigned = subj.get("assigned")
         confidence = subj.get("confidence", "B")
 
-        # 选科有赋分：赋分直映（赋分已标准化，最简洁可靠）
-        if assigned and name not in ("语文", "数学", "英语"):
+        if name in ("语文", "数学", "英语"):
+            if raw:
+                sum_main_raw += float(raw)
+            continue
+
+        # 赋分直映
+        if assigned:
+            score = float(assigned)
             results.append({
-                "subject": name,
-                "score": float(assigned),
-                "confidence": confidence,
+                "subject": name, "score": score, "confidence": confidence,
                 "method": "赋分直映法",
                 "detail": f"{name}赋分{assigned}（{confidence}级）→ 等效高考{assigned}分",
             })
+            sum_assigned += score
             continue
 
-        # 语数英：按总分比例折算
-        if name in ("语文", "数学", "英语") and total_score and total_equivalent:
-            if raw:
-                ratio = float(raw) / float(total_score) if float(total_score) > 0 else 0
-                eq = round(total_equivalent * ratio, 1)
-                results.append({
-                    "subject": name,
-                    "score": eq,
-                    "confidence": "B",
-                    "method": "比例折算法",
-                    "detail": f"{name}原始分{raw}占总分{total_score}的{ratio:.1%} → 等效{name}约{eq}分",
-                })
+        # 无赋分：尝试跨次回退
+        prev = _find_previous_subject_data(workspace, name, exam_name)
+        if prev:
+            n = prev.get("exams_skipped", 1)
+            discount = round(0.85 ** n, 3)
+            score = round(prev["score"] * discount, 1)
+            discount_pct = f"{discount:.2f}"
+            results.append({
+                "subject": name, "score": score, "confidence": "C",
+                "method": f"数据不足（回退至{prev['exam']}）",
+                "detail": f"本次考试缺少{name}数据，回退至{prev['exam']}的数据（{prev['score']}分×{discount_pct}={score}分，C级）。建议补录后重新计算。",
+            })
+            sum_assigned += score
             continue
 
-        # 选科无赋分：尝试校内对照法
+        # 无回退：尝试校内对照
         if name in school_data:
             sd = school_data[name]
             if "rank_scores" in sd and sd["rank_scores"]:
                 avg_gaokao = sum(sd["rank_scores"].values()) / len(sd["rank_scores"])
+                score = round(avg_gaokao, 1)
                 results.append({
-                    "subject": name,
-                    "score": round(avg_gaokao, 1),
-                    "confidence": "C",
+                    "subject": name, "score": score, "confidence": "C",
                     "method": "校内均值参照法",
                     "detail": f"{name}无赋分无排名→ 参照本校历届{name}均分约{avg_gaokao:.0f}分（C级，仅参考）",
                 })
+                sum_assigned += score
                 continue
 
         # 完全无数据
         results.append({
-            "subject": name,
-            "score": None,
+            "subject": name, "score": None,
             "confidence": confidence if confidence in ("C", "D") else "D",
             "method": "数据不足",
             "detail": f"{name}无赋分无排名数据，无法计算等效分",
         })
+
+    # ── Pass 2: 语数英 — 从剩余等效分中按比例分配 ──
+    remaining = max(0, total_equivalent - sum_assigned)
+    for subj in subjects_input:
+        name = subj.get("name", "")
+        raw = subj.get("raw")
+        if name not in ("语文", "数学", "英语"):
+            continue
+        if raw and sum_main_raw > 0:
+            ratio = float(raw) / sum_main_raw
+            eq = round(remaining * ratio, 1)
+            results.append({
+                "subject": name, "score": eq, "confidence": "B",
+                "method": "比例折算法",
+                "detail": f"总等效{total_equivalent} - 选科贡献{sum_assigned} = {remaining:.1f}(剩余) -> {name}占语数英{ratio:.1%} -> 等效{eq}分",
+            })
+        else:
+            results.append({
+                "subject": name, "score": None, "confidence": "D",
+                "method": "数据不足",
+                "detail": f"{name}无原始分，无法计算等效分",
+            })
 
     return results
 
@@ -435,6 +789,7 @@ def run(data):
     original_total_score = float(data["total_score"])  # 保存原始制总分，供单科比例计算使用
     if score_scale == 450:
         data = dict(data)
+        data["_original_total_score"] = original_total_score
         data["total_score"] = original_total_score * 750 / 450
         if data.get("special_line_exam") or data.get("special_line"):
             sl = data.get("special_line_exam") or data.get("special_line")
@@ -450,8 +805,16 @@ def run(data):
 
     methods = []
 
-    # Try methods in priority order: score_line → school_lookup → percentile → school_estimate
+    # Try methods in priority order: two_module → score_line → school_lookup → percentile → school_estimate
+    result = method_two_module(data, macro)
+    if result:
+        methods.append(result)
+
     result = method_score_line(data, macro)
+    if result:
+        methods.append(result)
+
+    result = method_school_threshold(data, macro)
     if result:
         methods.append(result)
 
@@ -546,54 +909,42 @@ def run(data):
                         "等效分可能存在偏差"
                     )
 
-    # ── 单科等效分 ──
+    # ── 单科等效分（含跨次回退，在函数内部处理）──
     data["_total_equivalent"] = equivalent_score
     subject_scores = compute_subject_equivalents(data, macro, original_total_score)
 
-    # ── 跨次数据回退 ──
-    # 跨次回退折扣系数 CROSS_EXAM_DISCOUNT = 0.85
-    # 基于相邻考试间等效分相关性的保守估计（典型重测信度下限）。
-    # 多步回退时累积衰减：discount = 0.85 ^ exams_skipped
-    for i, ss in enumerate(subject_scores):
-        if ss["confidence"] in ("C", "D") and ss["score"] is None:
-            prev = _find_previous_subject_data(workspace, ss["subject"], data.get("exam_name", ""))
-            if prev:
-                n = prev.get("exams_skipped", 1)
-                discount = round(0.85 ** n, 3)
-                fallback_score = round(prev["score"] * discount, 1)
-                discount_pct = f"{discount:.2f}" if n > 1 else "0.85"
-                subject_scores[i] = {
-                    **ss,
-                    "score": fallback_score,
-                    "confidence": "C",
-                    "method": f"{ss['method']}（回退至{prev['exam']}）",
-                    "detail": f"本次考试缺少{ss['subject']}数据，回退至{prev['exam']}的数据（{prev['score']}分×{discount_pct}={fallback_score}分，C级）。建议补录后重新计算。",
-                }
-
-    # ── 单科加总 + 置信度加权融合 ──
-    # 融合公式：fused = (primary_score × w_total + subject_sum × w_subject) / (w_total + w_subject)
-    # w_total = avg(所有方法权重) —— 主方法的总分法权重
-    # w_subject = avg(单科权重) × 0.7 —— 单科衰减因子，反映选科赋分信息量低于总分法的特性
-    #   0.7 基于保守假设：单科等效分中包含的独立信息量约为总分法的70%
+    # ── 多方法加权融合 ──
+    # 融合公式：所有方法 + 单科加总按置信度权重加权平均
+    # 单科加总衰减因子从 0.7 降至 0.5，降低其在融合中的比重
     subject_sum = sum(s["score"] for s in subject_scores if s["score"])
     if subject_scores and subject_sum:
         subject_weights = [weights_map.get(s["confidence"], 0) for s in subject_scores if s["score"]]
-        w_subject = (sum(subject_weights) / len(subject_weights) * 0.7) if subject_weights else 0
-        w_total = weights_map.get(best_confidence, 1.0)
+        w_subject = (sum(subject_weights) / len(subject_weights) * 0.5) if subject_weights else 0
+
+        # Collect all method scores + subject_sum with weights
+        components = []  # [(score, weight, label), ...]
+        for m in methods:
+            w = weights_map.get(m["confidence"], 0)
+            if w > 0:
+                components.append((m["score"], w, m["method"]))
 
         if w_subject > 0:
-            total_method_score = equivalent_score
-            fused = round((equivalent_score * w_total + subject_sum * w_subject) / (w_total + w_subject), 1)
+            components.append((subject_sum, w_subject, "单科加总"))
 
-            # 误差区间取两方法中较宽的
-            calculation_detail += f" | [融合] 单科加总{subject_sum}分(w={w_subject:.2f}) × 融合 → {fused}分"
+        if len(components) >= 2:
+            weighted_sum = sum(s * w for s, w, _ in components)
+            total_weight = sum(w for _, w, _ in components)
+            fused = round(weighted_sum / total_weight, 1)
+
+            parts = [f"{label}{score}分(w={w:.2f})" for score, w, label in components]
+            calculation_detail += f" | [融合] {' + '.join(parts)} → {fused}分"
 
             equivalent_score = fused
-            # 误差区间：各侧基于与实际使用方法的偏差计算
-            # 下限基于总分法偏差（主方法通常更保守），上限基于单科加总偏差（波动通常更大）
-            # "+3" 为安全边际，避免在方法完全一致时误差区间过窄
-            error_lower = round(fused - max(margin, abs(fused - total_method_score) + 3), 1)
-            error_upper = round(fused + max(margin, abs(fused - subject_sum) + 3), 1)
+            # 误差区间基于融合分 ± 最大方法间偏差
+            all_scores = [s for s, _, _ in components]
+            max_dev = max(abs(fused - s) for s in all_scores)
+            error_lower = round(fused - max(margin, max_dev + 3), 1)
+            error_upper = round(fused + max(margin, max_dev + 3), 1)
 
     result = {
         "status": "ok",

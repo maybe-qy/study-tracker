@@ -82,38 +82,43 @@
   </div>
   {% endif %}
 
-  {% if target_university %}
+  {% if tier_info and tier_info.current %}
   <div class="section">
-    <div class="section-title">目标院校</div>
-    <div class="stat-row">
-      <span class="stat-label">{{ target_university }}</span>
-      <span class="stat-value {{ gap_class }}">{{ gap_text }}</span>
-    </div>
-    {% for line in admission_lines %}
-    <div class="stat-row">
-      <span class="stat-label" style="font-size:12px;color:#94a3b8">{{ line.year }}年录取线</span>
-      <span class="stat-value" style="font-size:13px">{{ line.score }}分</span>
-    </div>
-    {% endfor %}
-  </div>
-  {% endif %}
+    <div class="section-title">院校定位</div>
 
-  {% if hierarchy_refs %}
-  <div class="section">
-    <div class="section-title">分数段参照</div>
-    {% for ref in hierarchy_refs %}
-    <div class="stat-row">
-      <span class="stat-label">{{ ref.name }}</span>
-      <span class="stat-value">{{ ref.score }}分（{{ ref.gap }}）</span>
+    <div style="background:#f0f7ff;border-radius:8px;padding:12px 16px;margin-bottom:8px;">
+      <div style="font-size:13px;color:#64748b;margin-bottom:2px;">当前梯队</div>
+      <div style="font-size:16px;font-weight:600;color:#1e40af;">{{ tier_info.current.name }}</div>
+      <div style="font-size:13px;color:#64748b;">{{ tier_info.current.threshold|int }} ~ {{ tier_info.current.upper|int }} 分</div>
     </div>
-    {% endfor %}
-  </div>
-  {% endif %}
 
-  {% if personal_info %}
-  <div class="archive-card">
-    <div class="hint">个人信息（仅存档，不参与计算）</div>
-    <div class="info">{{ personal_info }}</div>
+    {% if tier_info.next %}
+    <div class="stat-row">
+      <span class="stat-label">距上一级「{{ tier_info.next.name }}」</span>
+      <span class="stat-value" style="color:#f59e0b;">还差 {{ tier_info.next_gap|int }} 分</span>
+    </div>
+    {% endif %}
+
+    {% if tier_info.target_university %}
+    <div class="stat-row" style="margin-top:8px;padding-top:8px;border-top:1px solid #f1f5f9;">
+      <span class="stat-label">目标 {{ tier_info.target_university }}</span>
+      <span class="stat-value {% if tier_info.target_gap and tier_info.target_gap > 0 %}positive{% else %}negative{% endif %}">
+        {{ tier_info.target_line }} 分（{% if tier_info.target_gap and tier_info.target_gap > 0 %}+{% endif %}{{ tier_info.target_gap }} 分）
+      </span>
+    </div>
+    {% endif %}
+
+    <details style="margin-top:8px;">
+      <summary style="font-size:12px;color:#94a3b8;cursor:pointer;">梯队一览</summary>
+      <div style="margin-top:8px;">
+        {% for t in tier_info.all_tiers %}
+        <div class="stat-row" style="font-size:12px;{% if t.is_current %}background:#fef9c3;border-radius:4px;padding:2px 6px;{% endif %}">
+          <span style="color:#64748b;">{{ t.scope }} · {{ t.name }}</span>
+          <span style="font-weight:500;">{{ t.threshold|int }}~{{ t.upper|int }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </details>
   </div>
   {% endif %}
 

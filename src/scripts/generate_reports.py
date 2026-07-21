@@ -86,6 +86,8 @@ def load_data(workspace):
 
     # 宏观数据
     path = os.path.join(workspace, "data", "macro", "宏观数据_只读.xlsx")
+    if not os.path.exists(path):
+        path = os.path.join(workspace, "data", "macro", "宏观数据.xlsx")
     data["macro"] = {}
     if os.path.exists(path):
         wb = load_workbook(path, data_only=True)
@@ -301,6 +303,15 @@ def render_personal(data, env):
 
     latest = eq_records[-1]
     eq_scores = [float(r.get("等效分（融合结果）", 0) or 0) for r in eq_records if r.get("等效分（融合结果）")]
+    # 时间加权等效分（EWMA，α=0.6，越近权重越高）
+    if len(eq_scores) >= 2:
+        alpha = 0.6
+        ewma_score = eq_scores[0]
+        for s in eq_scores[1:]:
+            ewma_score = alpha * s + (1 - alpha) * ewma_score
+        ewma_score = round(ewma_score, 1)
+    else:
+        ewma_score = eq_scores[0] if eq_scores else 0
     weighted = filter_weighted(eq_records)
 
     trend_class, trend_arrow, trend_text = compute_trend(eq_scores)
@@ -310,65 +321,73 @@ def render_personal(data, env):
     labels, label_sequence = eval_labels(eq_scores) if len(eq_scores) >= 4 else (None, None)
     volatility_style = classify_volatility_style(labels, sigma, label_sequence) if has_analysis else None
 
-    # Target university
-    target_university = None
-    admission_lines = []
-    gap_text = ""
-    gap_class = ""
+    # ── 院校定位 ──
+    tier_info = None
+    tier_data = macro.get("院校层次参考", [])
+    if tier_data and eq_scores:
+        score = eq_scores[-1]
+        current_tier = None
+        next_tier = None
+        all_tiers = []
 
-    if eq_records:
+        for row in tier_data:
+            scope = str(row.get("范围", ""))
+            name = str(row.get("梯队", ""))
+            threshold_str = str(row.get("预估总分门槛", "0"))
+            upper_str = str(row.get("预估总分上限", "750"))
+            try:
+                threshold = float(threshold_str)
+                upper = float(upper_str) if upper_str else 750
+            except (ValueError, TypeError):
+                continue
+
+            tier_entry = {
+                "scope": scope,
+                "name": name,
+                "threshold": threshold,
+                "upper": upper,
+                "schools": str(row.get("代表院校", "")),
+                "is_current": False,
+            }
+
+            # Check if student is in this tier
+            if threshold <= score <= upper:
+                tier_entry["is_current"] = True
+                current_tier = tier_entry
+
+            all_tiers.append(tier_entry)
+
+        # Find next tier up
+        if current_tier:
+            above = [t for t in all_tiers if t["threshold"] > current_tier["upper"]]
+            above.sort(key=lambda t: t["threshold"])
+            if above:
+                next_tier = above[0]
+            elif [t for t in all_tiers if t["threshold"] > score]:
+                # Student between tiers
+                candidates = [t for t in all_tiers if t["threshold"] > score]
+                candidates.sort(key=lambda t: t["threshold"])
+                next_tier = candidates[0]
+
+        # Target university
         target_university = latest.get("目标院校")
         target_line = latest.get("目标院校录取线")
-        gap = latest.get("差距分数")
-        if target_university:
-            gap_text = f"+{gap}分" if gap and float(gap) > 0 else f"{gap}分"
-            gap_class = "positive" if (gap and float(gap) > 0) else "negative"
-            # Find historical lines
-            for rec in eq_records:
-                if rec.get("目标院校录取线"):
-                    admission_lines.append({
-                        "year": rec.get("日期", "-"),
-                        "score": rec["目标院校录取线"],
-                    })
+        target_gap = latest.get("差距分数")
 
-    # Hierarchy references (if no target)
-    hierarchy_refs = None
-    if not target_university:
-        uni_data = macro.get("省内高校录取线", [])
-        if uni_data and eq_scores:
-            latest_score = eq_scores[-1]
-            refs = []
-            for uni in uni_data:
-                score = float(uni.get("录取最低分", 0))
-                if score:
-                    gap_val = round(latest_score - score, 1)
-                    gap_str = f"差距+{gap_val}分" if gap_val >= 0 else f"差距{gap_val}分"
-                    refs.append({"name": uni.get("院校名称", "-"), "score": score, "gap": gap_str})
-            if refs:
-                hierarchy_refs = sorted(refs, key=lambda r: r["score"], reverse=True)[:5]
-
-    # Personal info (from config)
-    personal_info = None
-    config_path = os.path.join(data.get("_workspace", ""), "data", "config.json")
-    if os.path.exists(config_path):
-        with open(config_path, "r", encoding="utf-8") as f:
-            config = json.load(f)
-            parts = []
-            if config.get("mbti"):
-                parts.append(f"MBTI：{config['mbti']}")
-            if config.get("career"):
-                parts.append(f"职业兴趣：{config['career']}")
-            if config.get("class_type"):
-                parts.append(f"班型：{config['class_type']}")
-            if config.get("grade"):
-                parts.append(f"年级：{config['grade']}")
-            if parts:
-                personal_info = "  |  ".join(parts)
+        tier_info = {
+            "current": current_tier,
+            "next": next_tier,
+            "next_gap": round(next_tier["threshold"] - score, 0) if next_tier else None,
+            "all_tiers": all_tiers,
+            "target_university": target_university,
+            "target_line": target_line,
+            "target_gap": target_gap,
+        }
 
     template = env.get_template("report_personal.html")
     return template.render(
         generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
-        equivalent_score=f"{float(latest['等效分（融合结果）']):.0f} 分" if latest.get("等效分（融合结果）") else "暂无",
+        equivalent_score=f"{ewma_score:.0f} 分" if ewma_score else "暂无",
         confidence=latest.get("置信度", "-"),
         method=latest.get("主计算方法", "-"),
         error_lower=latest.get("误差区间下限", "-"),
@@ -382,12 +401,12 @@ def render_personal(data, env):
         volatility_upper=vol_high or "-",
         sigma=f"{sigma}分" if sigma else "-",
         volatility_style=volatility_style or "-",
-        target_university=target_university,
-        gap_text=gap_text,
-        gap_class=gap_class,
-        admission_lines=admission_lines,
-        hierarchy_refs=hierarchy_refs,
-        personal_info=personal_info,
+        target_university=None,
+        gap_text="",
+        gap_class="",
+        admission_lines=[],
+        hierarchy_refs=None,
+        tier_info=tier_info,
         disclaimer=DISCLAIMER,
     )
 
@@ -475,12 +494,17 @@ def render_subject(data, env, subject_name, sheet_name):
     if subject_data:
         for r in subject_data:
             raw = r.get("原始分")
-            scores.append(float(raw) if raw else None)
+            assigned = r.get("赋分")
+            # 选科有赋分时用赋分（标准化分数），否则用原始分
+            if assigned and subject_name not in ("语文", "数学", "英语"):
+                scores.append(float(assigned))
+            else:
+                scores.append(float(raw) if raw else None)
             records.append({
                 "date": r.get("日期", "-"),
                 "exam": r.get("考试名", "-"),
                 "raw": raw or "-",
-                "assigned": r.get("赋分") or "-",
+                "assigned": assigned or "-",
                 "confidence": r.get("赋分置信度") or "-",
             })
     else:
@@ -506,7 +530,11 @@ def render_subject(data, env, subject_name, sheet_name):
             if raw is None or raw == "":
                 continue
 
-            scores.append(float(raw))
+            # 选科有赋分时用赋分，否则用原始分
+            if assigned and subject_name not in ("语文", "数学", "英语"):
+                scores.append(float(assigned))
+            else:
+                scores.append(float(raw))
             records.append({
                 "date": exam.get("日期", "-"),
                 "exam": exam.get("考试名", "-"),
