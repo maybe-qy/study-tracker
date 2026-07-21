@@ -243,3 +243,26 @@ def test_score_line_beats_percentile(tmpdir):
     assert result["status"] == "ok"
     assert result["primary_method"] == "分数线对照法"
     assert result["confidence"] == "A"
+
+
+def test_score_scale_450_subject_ratio(tmpdir):
+    """B2 fix: 450分制下，单科等效分比例计算应使用原始总分（非换算后的750制）."""
+    ws = make_macro_ws(tmpdir)
+    data = {
+        "workspace": ws,
+        "total_score": 314,
+        "score_scale": 450,
+        "special_line_exam": 286.5,
+        "subjects": [
+            {"name": "语文", "raw": 98.5},
+            {"name": "数学", "raw": 111},
+            {"name": "英语", "raw": 104.5},
+        ],
+    }
+    result = run(data)
+    assert result["status"] == "ok"
+    subject_scores = result.get("subject_scores", [])
+    assert len(subject_scores) == 3
+    total_subject_sum = sum(s["score"] for s in subject_scores if s["score"])
+    assert abs(total_subject_sum - result["equivalent_score"]) < 5, \
+        f"单科等效分加总{total_subject_sum}与总分等效分{result['equivalent_score']}偏差过大（B2可能未修复）"

@@ -47,7 +47,7 @@ def read_macro_data(workspace):
 
 def method_score_line(data, macro):
     """Method 1: 分数线对照法（等比例放缩）— A级，最高优先级."""
-    special_line_exam = data.get("special_line_exam")
+    special_line_exam = data.get("special_line_exam") or data.get("special_line")
     if not special_line_exam:
         return None
 
@@ -220,7 +220,9 @@ def method_school_estimate(data, macro):
     coeff = coeff_map.get(school_type, 1.0)
 
     estimated_city_rank = int(int(school_rank) / int(school_total) * max_count * coeff)
+    estimated_city_rank = min(estimated_city_rank, max_count)  # clamp to avoid percentile overflow
     percentile = 1.0 - (estimated_city_rank / max_count)
+    percentile = max(0.0, min(1.0, percentile))  # clamp to [0, 1]
 
     sorted_table = sorted(score_table, key=lambda r: int(r.get("分数", 0)), reverse=True)
     target_count = int((1 - percentile) * max_count)
@@ -255,9 +257,9 @@ def read_school_subject_data(macro):
 
     for sheet_key in macro:
         sname = str(sheet_key)
-        has_fu = "富" in sname
+        has_fu = "富阳" in sname or "富中" in sname
         has_te = "特控" in sname
-        has_ben = "本" in sname
+        has_ben = "本" in sname and "对照" in sname and "总分" in sname
         has_dui = "对照" in sname
         has_zong = "总分" in sname
 
@@ -296,12 +298,15 @@ def read_school_subject_data(macro):
     return result
 
 
-def compute_subject_equivalents(data, macro):
+def compute_subject_equivalents(data, macro, original_total_score=None):
     """Compute per-subject equivalent scores.
 
     For 选科 with 赋分: equivalent = 赋分 (already standardized).
     For 选科 without 赋分: try school lookup, mark data insufficient.
     For 语数英: use proportion of total equivalent to total score.
+
+    original_total_score: 原始制总分。450分制考试中，语数英比例计算需使用
+    原始450制总分，而非换算后的750制总分，以保证 ratio = raw/450 而非 raw/750。
 
     Returns list of {subject, score, confidence, method, detail}.
     """
@@ -309,7 +314,7 @@ def compute_subject_equivalents(data, macro):
     if not subjects_input:
         return []
 
-    total_score = data.get("total_score", 0)
+    total_score = original_total_score if original_total_score else data.get("total_score", 0)
     total_equivalent = data.get("_total_equivalent", 0)
 
     school_data = read_school_subject_data(macro)
@@ -377,6 +382,8 @@ def _find_previous_subject_data(workspace, subject_name, current_exam_name):
 
     Reads 成绩总表.xlsx and looks for previous exams that have
     usable data for the given subject.
+    Returns dict with exam, score, field, exams_skipped or None.
+    exams_skipped counts how many exam rows were skipped before finding data.
     """
     import os as _os
     path = _os.path.join(workspace, "data", "personal", "成绩总表.xlsx")
@@ -390,79 +397,34 @@ def _find_previous_subject_data(workspace, subject_name, current_exam_name):
         rows = list(ws.iter_rows(min_row=2, values_only=True))
         rows.reverse()  # most recent first
 
+        exams_skipped = 0
         for row in rows:
             d = dict(zip(headers, row))
             exam_name = str(d.get("考试名", ""))
             # Skip current exam: fuzzy match on exam name
             if current_exam_name and (current_exam_name in exam_name or exam_name in current_exam_name):
+                exams_skipped = 0  # reset counter after passing the current exam
                 continue
 
             # Check if this exam has data for this subject
             if subject_name in ("语文", "数学", "英语"):
                 score = d.get(subject_name)
                 if score:
-                    return {"exam": exam_name, "score": float(score), "field": subject_name}
+                    return {"exam": exam_name, "score": float(score), "field": subject_name, "exams_skipped": exams_skipped}
             else:
                 for i in range(1, 4):
                     subj_name = str(d.get(f"选科{i}名称", ""))
                     if subj_name == subject_name:
                         assigned = d.get(f"选科{i}赋分")
                         if assigned:  # 优先赋分
-                            return {"exam": exam_name, "score": float(assigned), "field": f"选科{i}赋分"}
+                            return {"exam": exam_name, "score": float(assigned), "field": f"选科{i}赋分", "exams_skipped": exams_skipped}
                         raw = d.get(f"选科{i}原始分")
                         if raw:
-                            return {"exam": exam_name, "score": float(raw), "field": f"选科{i}原始分"}
+                            return {"exam": exam_name, "score": float(raw), "field": f"选科{i}原始分", "exams_skipped": exams_skipped}
+            exams_skipped += 1
     except Exception:
         return None
     return None
-
-
-def compute_weighted_score(methods):
-    """Compute confidence-weighted average from all available methods.
-
-    Weights: A=1.0, B=0.8, C=0.5, D=0.0
-    Returns weighted score or None if no valid methods.
-    """
-    weights = {"A": 1.0, "B": 0.8, "C": 0.5, "D": 0.0}
-    total_weight = sum(weights.get(m["confidence"], 0) for m in methods)
-    if total_weight == 0:
-        return None
-    weighted_sum = sum(m["score"] * weights.get(m["confidence"], 0) for m in methods)
-    return round(weighted_sum / total_weight, 1)
-
-
-def compute_error_range(primary, cross_validations):
-    """Calculate error range based on cross-validation spread."""
-    if not cross_validations:
-        default_margin = {"A": 5, "B": 10, "C": 15, "D": 20}
-        margin = default_margin.get(primary["confidence"], 10)
-        return {
-            "lower": round(primary["score"] - margin, 1),
-            "upper": round(primary["score"] + margin, 1),
-        }
-
-    valid_cv = [cv for cv in cross_validations if cv.get("score")]
-    if not valid_cv:
-        margin = 5
-    else:
-        avg_cv = sum(cv["score"] for cv in valid_cv) / len(valid_cv)
-        margin = max(3, abs(primary["score"] - avg_cv))
-
-    return {
-        "lower": round(primary["score"] - margin, 1),
-        "upper": round(primary["score"] + margin, 1),
-    }
-
-
-def compute_weighted_error(methods, weighted_score):
-    """Compute error range from confidence-weighted standard deviation across methods."""
-    weights_map = {"A": 1.0, "B": 0.8, "C": 0.5, "D": 0.0}
-    weights = [weights_map.get(m["confidence"], 0) for m in methods]
-    total_weight = sum(weights)
-    if total_weight == 0 or len(methods) < 2:
-        return 5.0  # default margin for single method
-    variance = sum(w * (m["score"] - weighted_score) ** 2 for m, w in zip(methods, weights)) / total_weight
-    return max(3.0, round(variance ** 0.5 * 1.5, 1))
 
 
 def run(data):
@@ -470,11 +432,13 @@ def run(data):
 
     # 满分制换算：450分制 → 750分制
     score_scale = data.get("score_scale", 750)
+    original_total_score = float(data["total_score"])  # 保存原始制总分，供单科比例计算使用
     if score_scale == 450:
         data = dict(data)
-        data["total_score"] = float(data["total_score"]) * 750 / 450
-        if data.get("special_line_exam"):
-            data["special_line_exam"] = float(data["special_line_exam"]) * 750 / 450
+        data["total_score"] = original_total_score * 750 / 450
+        if data.get("special_line_exam") or data.get("special_line"):
+            sl = data.get("special_line_exam") or data.get("special_line")
+            data["special_line_exam"] = float(sl) * 750 / 450
 
     macro = read_macro_data(workspace)
 
@@ -528,11 +492,12 @@ def run(data):
             "detail": m.get("detail", ""),
         })
 
-    # calculation_detail: primary method's detail, with cross-validation note if applicable
+    # calculation_detail: primary method as base, fusion appended later if applicable
     calculation_detail = primary.get("detail", "")
     if len(methods) >= 2:
         cv_names = "、".join(m["method"] for m in methods[1:])
         calculation_detail += f"（交叉验证：{cv_names}）"
+    calculation_detail = f"[主方法] {calculation_detail}"
 
     # Cross-validations: supplementary methods vs primary
     cross_validations = []
@@ -583,23 +548,33 @@ def run(data):
 
     # ── 单科等效分 ──
     data["_total_equivalent"] = equivalent_score
-    subject_scores = compute_subject_equivalents(data, macro)
+    subject_scores = compute_subject_equivalents(data, macro, original_total_score)
 
     # ── 跨次数据回退 ──
+    # 跨次回退折扣系数 CROSS_EXAM_DISCOUNT = 0.85
+    # 基于相邻考试间等效分相关性的保守估计（典型重测信度下限）。
+    # 多步回退时累积衰减：discount = 0.85 ^ exams_skipped
     for i, ss in enumerate(subject_scores):
         if ss["confidence"] in ("C", "D") and ss["score"] is None:
             prev = _find_previous_subject_data(workspace, ss["subject"], data.get("exam_name", ""))
             if prev:
-                fallback_score = round(prev["score"] * 0.85, 1)  # 跨次折扣
+                n = prev.get("exams_skipped", 1)
+                discount = round(0.85 ** n, 3)
+                fallback_score = round(prev["score"] * discount, 1)
+                discount_pct = f"{discount:.2f}" if n > 1 else "0.85"
                 subject_scores[i] = {
                     **ss,
                     "score": fallback_score,
                     "confidence": "C",
                     "method": f"{ss['method']}（回退至{prev['exam']}）",
-                    "detail": f"{ss['detail']}。回退至{prev['exam']}的{prev['score']}分×0.85={fallback_score}分",
+                    "detail": f"本次考试缺少{ss['subject']}数据，回退至{prev['exam']}的数据（{prev['score']}分×{discount_pct}={fallback_score}分，C级）。建议补录后重新计算。",
                 }
 
     # ── 单科加总 + 置信度加权融合 ──
+    # 融合公式：fused = (primary_score × w_total + subject_sum × w_subject) / (w_total + w_subject)
+    # w_total = avg(所有方法权重) —— 主方法的总分法权重
+    # w_subject = avg(单科权重) × 0.7 —— 单科衰减因子，反映选科赋分信息量低于总分法的特性
+    #   0.7 基于保守假设：单科等效分中包含的独立信息量约为总分法的70%
     subject_sum = sum(s["score"] for s in subject_scores if s["score"])
     if subject_scores and subject_sum:
         subject_weights = [weights_map.get(s["confidence"], 0) for s in subject_scores if s["score"]]
@@ -611,9 +586,12 @@ def run(data):
             fused = round((equivalent_score * w_total + subject_sum * w_subject) / (w_total + w_subject), 1)
 
             # 误差区间取两方法中较宽的
-            calculation_detail += f" | 单科加总{subject_sum}分(w={w_subject:.2f}) → 融合{fused}分"
+            calculation_detail += f" | [融合] 单科加总{subject_sum}分(w={w_subject:.2f}) × 融合 → {fused}分"
 
             equivalent_score = fused
+            # 误差区间：各侧基于与实际使用方法的偏差计算
+            # 下限基于总分法偏差（主方法通常更保守），上限基于单科加总偏差（波动通常更大）
+            # "+3" 为安全边际，避免在方法完全一致时误差区间过窄
             error_lower = round(fused - max(margin, abs(fused - total_method_score) + 3), 1)
             error_upper = round(fused + max(margin, abs(fused - subject_sum) + 3), 1)
 

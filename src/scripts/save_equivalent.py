@@ -46,6 +46,16 @@ def run(workspace, exam_name, exam_date, calc_result, target_university=None, ta
     if target_line and calc_result.get("equivalent_score"):
         gap = round(calc_result["equivalent_score"] - float(target_line), 1)
 
+    import json as _json
+
+    extra_info = _json.dumps({
+        "subject_scores": calc_result.get("subject_scores", []),
+        "warnings": calc_result.get("warnings", []),
+        "trust_note": calc_result.get("trust_note"),
+        "divergence": calc_result.get("divergence"),
+        "calculation_detail": calc_result.get("calculation_detail", ""),
+    }, ensure_ascii=False)
+
     ws.append([
         exam_name,
         exam_date,
@@ -59,6 +69,7 @@ def run(workspace, exam_name, exam_date, calc_result, target_university=None, ta
         target_university or "",
         target_line or "",
         gap or "",
+        extra_info,
     ])
 
     wb.save(path)

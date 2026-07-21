@@ -133,11 +133,14 @@ def build_row(data):
 def create_md(workspace, data):
     """Write immutable markdown record to 个体数据/."""
     # Calculate sum check: 语数英原始分 + 选科赋分（有赋分用赋分，没有用原始分）
+    # 450分制考试总分仅含语数英，不包含选科
+    score_scale = data.get("score_scale", 750)
     comparison_sum = (data.get("cn_score") or 0) + (data.get("math_score") or 0) + (data.get("en_score") or 0)
-    for i in range(1, 4):
-        assigned = data.get(f"sub{i}_assigned")
-        raw = data.get(f"sub{i}_raw") or 0
-        comparison_sum += (assigned if assigned else raw)
+    if score_scale != 450:
+        for i in range(1, 4):
+            assigned = data.get(f"sub{i}_assigned")
+            raw = data.get(f"sub{i}_raw") or 0
+            comparison_sum += (assigned if assigned else raw)
     total = data["total_score"]
     if abs(comparison_sum - total) > 0.5:
         check_note = f"各科加总（选科有赋分用赋分）= {comparison_sum}，≠ 总分 {total}（用户确认以总分为准）"

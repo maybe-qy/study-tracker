@@ -220,8 +220,6 @@ def eval_labels(scores):
     labels = {"积极": 0, "正常": 0, "消极": 0}
     sequence = []
     alpha = 0.3
-    sequence = []
-    labels = {"积极": 0, "正常": 0, "消极": 0}
     # 预热：用前3个点建立EWMA基线
     ewma = scores[0]
     for s in scores[1:3]:
@@ -242,7 +240,7 @@ def eval_labels(scores):
 
 
 def classify_volatility_style(labels, sigma, sequence):
-    """Classify volatility style: 稳定型/波动型/趋势型. Returns None if insufficient data."""
+    """Classify volatility pattern. Returns descriptive label or None if insufficient data."""
     if labels is None or sequence is None or sigma is None:
         return None
     total = labels["积极"] + labels["正常"] + labels["消极"]
@@ -260,12 +258,12 @@ def classify_volatility_style(labels, sigma, sequence):
         else:
             current_run = 1
     if max_consecutive >= 3:
-        return "趋势型"
+        return "呈持续变化趋势"
     if active_ratio >= 0.5 and max_consecutive < 3:
-        return "波动型"
+        return "分数波动较大"
     if normal_ratio >= 0.7:
-        return "稳定型"
-    return "波动型"
+        return "分数相对稳定"
+    return "分数波动较大"
 
 
 # ─── Report generators ─────────────────────────────────────────────────
