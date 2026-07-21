@@ -81,6 +81,9 @@ def method_score_line(data, macro):
             "detail": f"满分750 → 等效分750",
         }
 
+    if float(special_line_exam) >= 750:
+        return None
+
     es = (750 - gaokao_sl) / (750 - special_line_exam) * (total_score - special_line_exam) + gaokao_sl
     return {
         "method": "分数线对照法",
@@ -377,7 +380,6 @@ def method_two_module(data, macro):
 
     # ── Module 2: 选科 ──
     subjects_input = data.get("subjects", [])
-    subj_names_used = {"语数英综合", "语文", "数学", "英语"}
     for subj in subjects_input:
         name = subj.get("name", "")
         if name in ("语文", "数学", "英语"):
@@ -635,7 +637,7 @@ def read_school_subject_data(macro):
     return result
 
 
-def compute_subject_equivalents(data, macro, original_total_score=None):
+def compute_subject_equivalents(data, macro):
     """Compute per-subject equivalent scores.
 
     Two-pass approach:
@@ -868,7 +870,11 @@ def compute_independent_subject_sum(data, macro):
     if not confidences:
         return None
 
-    return {"sum": round(subject_sum, 1), "confidences": confidences}
+    subject_sum = round(subject_sum, 1)
+    if subject_sum > 750:
+        return None  # 超满分上限，不参与融合
+
+    return {"sum": subject_sum, "confidences": confidences}
 
 
 def run(data):
@@ -1001,7 +1007,7 @@ def run(data):
 
     # ── 单科等效分（展示用，从总分比例分配，保证各科之和=总分）──
     data["_total_equivalent"] = equivalent_score
-    subject_scores = compute_subject_equivalents(data, macro, original_total_score)
+    subject_scores = compute_subject_equivalents(data, macro)
 
     # ── 多方法加权融合 ──
     # 融合公式：所有可用方法 + 单科加总按置信度权重加权平均
@@ -1032,6 +1038,9 @@ def run(data):
         calculation_detail += f" | [融合] {' + '.join(parts)} → {fused}分"
 
         equivalent_score = fused
+        # 用融合后的总分重算各科等效分，保证各科加总=总分
+        data["_total_equivalent"] = equivalent_score
+        subject_scores = compute_subject_equivalents(data, macro)
         # 误差区间基于融合分 ± 最大方法间偏差
         all_scores = [s for s, _, _ in components]
         max_dev = max(abs(fused - s) for s in all_scores)

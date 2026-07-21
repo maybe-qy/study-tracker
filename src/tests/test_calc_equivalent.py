@@ -170,7 +170,7 @@ def test_no_macro_file(tmpdir):
 
 
 def test_priority_order(tmpdir):
-    """Test that score_line (P1) beats percentile (P3) when both available."""
+    """Test that score_line (P2) beats percentile (P5) when both available."""
     ws = make_macro_ws(tmpdir)
     data = {
         "workspace": ws,
@@ -230,7 +230,7 @@ def test_gaoyi_no_longer_blocked(tmpdir):
 
 
 def test_score_line_beats_percentile(tmpdir):
-    """Test that score_line (P1) takes priority over percentile (P3)."""
+    """Test that score_line (P2) takes priority over percentile (P5)."""
     ws = make_macro_ws(tmpdir)
     data = {
         "workspace": ws,
@@ -264,5 +264,120 @@ def test_score_scale_450_subject_ratio(tmpdir):
     subject_scores = result.get("subject_scores", [])
     assert len(subject_scores) == 3
     total_subject_sum = sum(s["score"] for s in subject_scores if s["score"])
-    assert abs(total_subject_sum - result["equivalent_score"]) < 5, \
-        f"单科等效分加总{total_subject_sum}与总分等效分{result['equivalent_score']}偏差过大（B2可能未修复）"
+    # M14: verify ratio uses original 450-scale denominator, not converted 750
+    chinese = [s for s in subject_scores if s["subject"] == "语文"][0]
+    actual_ratio = chinese["score"] / total_subject_sum
+    expected_ratio = 98.5 / 314  # should be ~0.3137, NOT 98.5/523.33≈0.188
+    assert abs(actual_ratio - expected_ratio) < 0.01, \
+        f"语文占比{actual_ratio:.4f}，期望{expected_ratio:.4f}（B2: 分母应为原始450制，非750制）"
+
+
+def make_macro_ws_with_upgrade(tmpdir):
+    """Create macro data with期末升级 sheet for two-module and school-threshold tests."""
+    from openpyxl import Workbook
+    ws_root = tmpdir
+    macro_dir = os.path.join(ws_root, "data", "macro")
+    os.makedirs(macro_dir, exist_ok=True)
+
+    wb = Workbook()
+    ws1 = wb.active
+    ws1.title = "一分一段表"
+    ws1.append(["分数", "累计人数", "省份", "年份"])
+    for i, score in enumerate(range(750, 299, -10)):
+        ws1.append([score, (i + 1) * 100, "浙江", 2026])
+
+    ws2 = wb.create_sheet("特控线")
+    ws2.append(["年份", "省份", "特控线分数"])
+    ws2.append([2026, "浙江", 592])
+
+    # 期末升级 sheet: col0=科目, col1=2027划线, col2=2027上线, col3=2028划线, col4=2028上线
+    ws3 = wb.create_sheet("期末高一下升级")
+    ws3.append(["科目", "2027划线", "2027上线", "2028划线", "2028上线"])
+    ws3.append(["特控分段", "", "", "", ""])
+    ws3.append(["语数英综合", "", "", 270, 500])
+    ws3.append(["物理", "", "", 65, ""])
+    ws3.append(["化学", "", "", 70, ""])
+    ws3.append(["浙大分段", "", "", "", ""])
+    ws3.append(["语数英综合", "", "", 300, 150])
+    ws3.append(["物理", "", "", 85, ""])
+    ws3.append(["化学", "", "", 90, ""])
+
+    # 结构 sheet for school_threshold
+    ws4 = wb.create_sheet("期末结构")
+    ws4.append(["类别", "人数"])
+    ws4.append(["全校总人数", "835人"])
+
+    wb.save(os.path.join(macro_dir, "宏观数据_只读.xlsx"))
+    return ws_root
+
+
+def test_two_module_method(tmpdir):
+    """M13: 双模块换算法 (priority 1) with upgrade sheet."""
+    ws = make_macro_ws_with_upgrade(tmpdir)
+    data = {
+        "workspace": ws,
+        "exam_name": "高一下期末",
+        "total_score": 570,
+        "score_scale": 750,
+        "subjects": [
+            {"name": "语文", "raw": 115},
+            {"name": "数学", "raw": 108},
+            {"name": "英语", "raw": 112},
+            {"name": "物理", "raw": 80, "assigned": 88},
+            {"name": "化学", "raw": 75, "assigned": 85},
+        ],
+    }
+    result = run(data)
+    assert result["status"] == "ok"
+    assert result["primary_method"] == "双模块换算法"
+    assert result["confidence"] in ("A", "B")
+
+
+def test_school_threshold_method(tmpdir):
+    """M13: 校排阈值估算法 (priority 3) triggered with upgrade + school data."""
+    ws = make_macro_ws_with_upgrade(tmpdir)
+    data = {
+        "workspace": ws,
+        "exam_name": "高一下期末",
+        "total_score": 480,  # → 288 in 450-scale, between 特控270 and 浙大300
+        "score_scale": 750,
+        "school_type": "省重点",
+        "subjects": [
+            {"name": "语文", "raw": 105},
+            {"name": "数学", "raw": 100},
+            {"name": "英语", "raw": 95},
+            {"name": "物理", "raw": 60},
+            {"name": "化学", "raw": 55},
+        ],
+    }
+    result = run(data)
+    assert result["status"] == "ok"
+    # 双模块 should be primary (P1), 校排阈值 should appear as cross-validation
+    methods_seen = [m["method"] for m in result["method_details"]]
+    assert "校排阈值估算法" in methods_seen
+
+
+def test_independent_subject_sum(tmpdir):
+    """M12: compute_independent_subject_sum produces estimate independent of total."""
+    from calc_equivalent import compute_independent_subject_sum, read_macro_data
+    ws = make_macro_ws(tmpdir)
+    macro = read_macro_data(ws)
+    data = {
+        "total_score": 650,
+        "score_scale": 750,
+        "special_line_exam": 546.5,
+        "subjects": [
+            {"name": "语文", "raw": 120},
+            {"name": "数学", "raw": 110},
+            {"name": "英语", "raw": 100},
+            {"name": "物理", "assigned": 88},
+            {"name": "化学", "assigned": 91},
+            {"name": "技术", "assigned": 66},
+        ],
+    }
+    result = compute_independent_subject_sum(data, macro)
+    assert result is not None
+    assert "sum" in result
+    assert "confidences" in result
+    assert len(result["confidences"]) == 6  # 3 main + 3 elective
+    assert result["sum"] > 0

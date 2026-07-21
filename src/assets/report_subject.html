@@ -63,9 +63,9 @@
       <tr>
         <th>日期</th>
         <th>考试</th>
-        <th>原始分</th>
-        <th>赋分</th>
+        <th>等效分</th>
         <th>置信度</th>
+        <th>方法</th>
       </tr>
     </thead>
     <tbody>
@@ -73,15 +73,15 @@
       <tr>
         <td>{{ record.date }}</td>
         <td>{{ record.exam }}</td>
-        <td>{{ record.raw }}</td>
-        <td>{{ record.assigned }}</td>
+        <td><strong>{{ record.score if record.score else record.assigned if record.assigned != '-' else record.raw }}</strong></td>
         <td><span class="confidence confidence-{{ record.confidence }}">{{ record.confidence }}级</span></td>
+        <td style="font-size:11px;color:#94a3b8;">{{ record.method if record.method else '-' }}</td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
 
-  <div class="note">动态分 = 近几次成绩加权平均（EWMA，越近权重越高）。单科不做等效分计算。</div>
+  <div class="note">动态分 = 近几次成绩加权平均（EWMA，越近权重越高）。等效分来自各场考试的等效分计算。</div>
 
   <details>
     <summary>查看详细声明</summary>

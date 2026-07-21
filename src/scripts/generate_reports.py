@@ -2,7 +2,7 @@
 """Generate 8 HTML reports from Excel data.
 
 Reports:
-  1. 个人档案.html — latest equivalent score, status, target gap, personal info
+  1. 个人档案.html — latest equivalent score, status, target gap
   2. 高考总分趋势.html — equivalent score time series + analysis
   3-8. [语文/数学/英语/选1/选2/选3]追踪.html — single subject tracking
 
@@ -109,7 +109,7 @@ CONFIDENCE_WEIGHTS = {"A": 1.0, "B": 0.8, "C": 0.5, "D": 0.0}
 
 
 def filter_weighted(records):
-    """Extract (score, weight) tuples from equivalent score records, excluding C-level."""
+    """Extract (score, weight) tuples from equivalent score records, excluding D-level."""
     weighted = []
     for r in records:
         conf = str(r.get("置信度", "A")).strip()
@@ -153,27 +153,6 @@ def compute_volatility(scores):
     mean = statistics.mean(scores)
     sigma = statistics.stdev(scores)
     return (round(sigma, 1), round(mean - 1.5 * sigma, 1), round(mean + 1.5 * sigma, 1))
-
-
-def compute_trend_weighted(weighted_scores):
-    """Weighted linear trend. weighted_scores: list of (score, weight)."""
-    n = len(weighted_scores)
-    if n < 2:
-        return ("flat", "→", "数据不足")
-    scores = [s for s, _ in weighted_scores]
-    x_mean = (n - 1) / 2
-    y_mean = sum(scores) / n
-    num = sum((i - x_mean) * scores[i] for i in range(n))
-    den = sum((i - x_mean) ** 2 for i in range(n))
-    if den == 0:
-        return ("flat", "→", "持平")
-    slope = num / den
-    if slope > 1.5:
-        return ("up", "↑", "上升")
-    elif slope < -1.5:
-        return ("down", "↓", "下降")
-    else:
-        return ("flat", "→", "持平")
 
 
 def compute_volatility_weighted(weighted_scores):
@@ -278,8 +257,10 @@ def render_personal(data, env):
         return template.render(
             generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
             equivalent_score="暂无数据",
+            latest_equiv=0,
             confidence="-",
             method="-",
+            calc_detail="",
             error_lower="-",
             error_upper="-",
             has_analysis=False,
@@ -290,12 +271,8 @@ def render_personal(data, env):
             volatility_lower="-",
             volatility_upper="-",
             sigma="-",
-            target_university=None,
-            gap_text="",
-            gap_class="",
-            admission_lines=[],
+            subject_scores=[],
             hierarchy_refs=None,
-            personal_info=None,
             disclaimer=DISCLAIMER,
         )
 
@@ -327,9 +304,9 @@ def render_personal(data, env):
     target_gap = latest.get("差距分数")
 
     tier_info = None
+    score = latest_equiv if latest_equiv else (eq_scores[-1] if eq_scores else 0)
     tier_data = macro.get("院校层次参考", [])
-    if tier_data and eq_scores:
-        score = eq_scores[-1]
+    if tier_data and score > 0:
         current_tier = None
         next_tier = None
         all_tiers = []
@@ -397,11 +374,13 @@ def render_personal(data, env):
 
     # Extract calculation detail from latest record
     latest_calc_detail = ""
+    latest_subject_scores = []
     detail_str = latest.get("详细信息", "")
     if detail_str:
         try:
             detail_obj = json.loads(detail_str)
             latest_calc_detail = detail_obj.get("calculation_detail", "")
+            latest_subject_scores = detail_obj.get("subject_scores", [])
         except (json.JSONDecodeError, TypeError):
             pass
 
@@ -409,6 +388,7 @@ def render_personal(data, env):
     return template.render(
         generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
         equivalent_score=f"{latest_equiv:.0f} 分" if latest_equiv else "暂无",
+        latest_equiv=latest_equiv or 0,
         confidence=latest.get("置信度", "-"),
         method=latest.get("主计算方法", "-"),
         calc_detail=latest_calc_detail,
@@ -423,6 +403,7 @@ def render_personal(data, env):
         volatility_upper=vol_high or "-",
         sigma=f"{sigma}分" if sigma else "-",
         volatility_style=volatility_style or "-",
+        subject_scores=latest_subject_scores,
         hierarchy_refs=None,
         tier_info=tier_info,
         disclaimer=DISCLAIMER,
@@ -457,8 +438,7 @@ def render_trend(data, env):
         detail_str = r.get("详细信息", "")
         if detail_str:
             try:
-                import json as _json
-                detail_obj = _json.loads(detail_str)
+                detail_obj = json.loads(detail_str)
                 calc_detail = detail_obj.get("calculation_detail", "")
             except (_json.JSONDecodeError, TypeError):
                 pass
@@ -502,7 +482,7 @@ def render_trend(data, env):
     template = env.get_template("report_trend.html")
     return template.render(
         generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
-        exams=exams,
+        exams=list(reversed(exams)),
         has_analysis=has_analysis,
         trend_class=trend_class,
         trend_arrow=trend_arrow,
@@ -519,63 +499,83 @@ def render_trend(data, env):
 
 def render_subject(data, env, subject_name, sheet_name):
     """Render a single subject tracking HTML.
-    Reads from 单科追踪.xlsx first; falls back to 成绩总表.xlsx exam records.
+    Reads per-subject equivalent scores from 等效分记录 first;
+    falls back to 成绩总表.xlsx exam records.
     """
-    subject_data = data["subjects"].get(sheet_name, [])
+    eq_records = data.get("equivalent", [])
     records = []
     scores = []
 
-    if subject_data:
-        for r in subject_data:
-            raw = r.get("原始分")
-            assigned = r.get("赋分")
-            # 选科有赋分时用赋分（标准化分数），否则用原始分
-            if assigned and subject_name not in ("语文", "数学", "英语"):
-                scores.append(float(assigned))
-            else:
-                scores.append(float(raw) if raw else None)
-            records.append({
-                "date": r.get("日期", "-"),
-                "exam": r.get("考试名", "-"),
-                "raw": raw or "-",
-                "assigned": assigned or "-",
-                "confidence": r.get("赋分置信度") or "-",
-            })
-    else:
-        # Fallback: extract from exam records (成绩总表)
-        for exam in data.get("exams", []):
-            raw = None
-            assigned = None
-            conf = None
-
-            # Main subjects
-            if subject_name in ("语文", "数学", "英语"):
-                raw = exam.get(subject_name)
-                conf = "B"  # 语数英原始分
-            else:
-                # Check 选科 columns
-                for i in range(1, 4):
-                    if str(exam.get(f"选科{i}名称", "")) == subject_name:
-                        raw = exam.get(f"选科{i}原始分")
-                        assigned = exam.get(f"选科{i}赋分")
-                        conf = exam.get(f"选科{i}赋分置信度") or "A"
-                        break
-
-            if raw is None or raw == "":
+    # Primary: extract per-subject equivalent scores from saved eq data
+    if eq_records:
+        for eq in eq_records:
+            detail_str = eq.get("详细信息", "")
+            if not detail_str:
                 continue
+            try:
+                detail_obj = json.loads(detail_str)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            for s in detail_obj.get("subject_scores", []):
+                if s.get("subject") != subject_name:
+                    continue
+                score = s.get("score")
+                if score:
+                    scores.append(float(score))
+                    records.append({
+                        "date": eq.get("日期", "-"),
+                        "exam": eq.get("考试名", "-"),
+                        "score": f"{score:.1f}",
+                        "confidence": s.get("confidence", "-"),
+                        "method": s.get("method", "-"),
+                    })
 
-            # 选科有赋分时用赋分，否则用原始分
-            if assigned and subject_name not in ("语文", "数学", "英语"):
-                scores.append(float(assigned))
-            else:
-                scores.append(float(raw))
-            records.append({
-                "date": exam.get("日期", "-"),
-                "exam": exam.get("考试名", "-"),
-                "raw": raw if raw else "-",
-                "assigned": assigned if assigned else "-",
-                "confidence": conf if conf else "-",
-            })
+    # Fallback: extract from 单科追踪.xlsx or 成绩总表
+    if not records:
+        subject_data = data["subjects"].get(sheet_name, [])
+        if subject_data:
+            for r in subject_data:
+                raw = r.get("原始分")
+                assigned = r.get("赋分")
+                if assigned and subject_name not in ("语文", "数学", "英语"):
+                    scores.append(float(assigned))
+                else:
+                    scores.append(float(raw) if raw else None)
+                records.append({
+                    "date": r.get("日期", "-"),
+                    "exam": r.get("考试名", "-"),
+                    "raw": raw or "-",
+                    "assigned": assigned or "-",
+                    "confidence": r.get("赋分置信度") or "-",
+                })
+        else:
+            for exam in data.get("exams", []):
+                raw = None
+                assigned = None
+                conf = None
+                if subject_name in ("语文", "数学", "英语"):
+                    raw = exam.get(subject_name)
+                    conf = "B"
+                else:
+                    for i in range(1, 4):
+                        if str(exam.get(f"选科{i}名称", "")) == subject_name:
+                            raw = exam.get(f"选科{i}原始分")
+                            assigned = exam.get(f"选科{i}赋分")
+                            conf = exam.get(f"选科{i}赋分置信度") or "A"
+                            break
+                if raw is None or raw == "":
+                    continue
+                if assigned and subject_name not in ("语文", "数学", "英语"):
+                    scores.append(float(assigned))
+                else:
+                    scores.append(float(raw))
+                records.append({
+                    "date": exam.get("日期", "-"),
+                    "exam": exam.get("考试名", "-"),
+                    "raw": raw if raw else "-",
+                    "assigned": assigned if assigned else "-",
+                    "confidence": conf if conf else "-",
+                })
 
     valid_scores = [s for s in scores if s is not None]
     if not valid_scores:
@@ -605,7 +605,7 @@ def render_subject(data, env, subject_name, sheet_name):
         trend_class=trend_class,
         trend_arrow=trend_arrow,
         trend_text=trend_text,
-        records=records,
+        records=list(reversed(records)),
         disclaimer=DISCLAIMER,
     )
 
