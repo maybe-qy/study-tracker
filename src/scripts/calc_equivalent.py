@@ -273,6 +273,12 @@ def method_two_module(data, macro):
         return None
 
     wb = load_workbook(path, data_only=True)
+
+    # Only match if exam context aligns (期末 exam ↔ 期末 upgrade sheet)
+    if "期末" not in data.get("exam_name", ""):
+        wb.close()
+        return None
+
     ws = None
     for sn in wb.sheetnames:
         if "期末" in str(sn) and "升级" in str(sn):
@@ -474,6 +480,11 @@ def method_school_threshold(data, macro):
         return None
 
     wb = load_workbook(path, data_only=True)
+
+    # Only match if exam context aligns
+    if "期末" not in data.get("exam_name", ""):
+        wb.close()
+        return None
 
     # Find upgrade sheet
     ws = None

@@ -57,6 +57,18 @@
         <td><span class="confidence confidence-{{ exam.confidence }}">{{ exam.confidence }}级</span></td>
         <td>{{ exam.method }}</td>
       </tr>
+      {% if exam.calc_detail %}
+      <tr>
+        <td colspan="5" style="padding:4px 12px 8px 12px;font-size:12px;color:#94a3b8;line-height:1.6;">
+          {% for part in exam.calc_detail.split('|') %}
+          {% set p = part.strip() %}
+          {% if p %}
+          <div style="margin-bottom:2px;">{{ p }}</div>
+          {% endif %}
+          {% endfor %}
+        </td>
+      </tr>
+      {% endif %}
       {% endfor %}
     </tbody>
   </table>
@@ -92,9 +104,21 @@
   {% endif %}
 
   {% if cross_validations %}
-  <div class="cross-validation">
+  <div class="section">
+    <div class="section-title">交叉验证</div>
+    <div style="font-size:13px;color:#64748b;">
+      以下为其他总分方法对本考试等效分的独立估算（不参与融合，仅作参照）。
+      差异 = 交叉验证分 − 融合结果分。
+    </div>
     {% for cv in cross_validations %}
-    交叉验证（{{ cv.method }}）：{{ cv.score }}分 · 差异 {{ cv.diff }}分<br>
+    <div class="stat-row">
+      <span class="stat-label">{{ cv.method }}</span>
+      <span class="stat-value">{{ cv.score }}分
+        <span style="color:{% if cv.diff.startswith('+') %}#16a34a{% else %}#dc2626{% endif %};font-size:12px;">
+          · 差异 {{ cv.diff }}分
+        </span>
+      </span>
+    </div>
     {% endfor %}
   </div>
   {% endif %}

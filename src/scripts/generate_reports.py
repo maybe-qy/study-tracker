@@ -434,12 +434,24 @@ def render_trend(data, env):
 
     exams = []
     for r in eq_records:
+        # Extract calculation detail from 详细信息 JSON
+        calc_detail = ""
+        detail_str = r.get("详细信息", "")
+        if detail_str:
+            try:
+                import json as _json
+                detail_obj = _json.loads(detail_str)
+                calc_detail = detail_obj.get("calculation_detail", "")
+            except (_json.JSONDecodeError, TypeError):
+                pass
+
         exams.append({
             "date": r.get("日期", "-"),
             "name": r.get("考试名", "-"),
             "score": r.get("等效分（融合结果）", "-"),
             "confidence": r.get("置信度", "-"),
             "method": r.get("主计算方法", "-"),
+            "calc_detail": calc_detail,
         })
 
     eq_scores = [float(r["等效分（融合结果）"]) for r in eq_records if r.get("等效分（融合结果）")]
