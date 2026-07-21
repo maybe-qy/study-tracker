@@ -483,6 +483,7 @@ def render_trend(data, env):
             if primary:
                 diff = f"{cv_score - primary:+.1f}"
             cross_validations.append({
+                "exam": r.get("考试名", "-"),
                 "method": r["交叉验证方法1"],
                 "score": r["交叉验证分1"],
                 "diff": diff or "-",

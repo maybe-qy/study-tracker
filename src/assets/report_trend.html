@@ -112,7 +112,7 @@
     </div>
     {% for cv in cross_validations %}
     <div class="stat-row">
-      <span class="stat-label">{{ cv.method }}</span>
+      <span class="stat-label">{{ cv.exam }} · {{ cv.method }}</span>
       <span class="stat-value">{{ cv.score }}分
         <span style="color:{% if cv.diff.startswith('+') %}#16a34a{% else %}#dc2626{% endif %};font-size:12px;">
           · 差异 {{ cv.diff }}分
