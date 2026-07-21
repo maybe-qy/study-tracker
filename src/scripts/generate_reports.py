@@ -41,9 +41,7 @@ DISCLAIMER = """声明与局限性
    年级影响的是知识范围覆盖度（等效分对高考的预测效度），
    而非等效分计算本身的可靠性。
 
-4. 数据来源：用户上传。
-
-5. 个人信息：MBTI、职业偏好等信息仅存档展示，不参与任何分数计算或分析。"""
+4. 数据来源：用户上传。"""
 
 
 def read_sheet_dicts(ws):
@@ -302,6 +300,7 @@ def render_personal(data, env):
         )
 
     latest = eq_records[-1]
+    latest_equiv = float(latest.get("等效分（融合结果）", 0)) if latest.get("等效分（融合结果）") else None
     eq_scores = [float(r.get("等效分（融合结果）", 0) or 0) for r in eq_records if r.get("等效分（融合结果）")]
     # 时间加权等效分（EWMA，α=0.6，越近权重越高）
     if len(eq_scores) >= 2:
@@ -322,6 +321,11 @@ def render_personal(data, env):
     volatility_style = classify_volatility_style(labels, sigma, label_sequence) if has_analysis else None
 
     # ── 院校定位 ──
+    # 目标院校始终从 latest 提取，不依赖院校层次参考数据
+    target_university = latest.get("目标院校")
+    target_line = latest.get("目标院校录取线")
+    target_gap = latest.get("差距分数")
+
     tier_info = None
     tier_data = macro.get("院校层次参考", [])
     if tier_data and eq_scores:
@@ -369,16 +373,23 @@ def render_personal(data, env):
                 candidates.sort(key=lambda t: t["threshold"])
                 next_tier = candidates[0]
 
-        # Target university
-        target_university = latest.get("目标院校")
-        target_line = latest.get("目标院校录取线")
-        target_gap = latest.get("差距分数")
-
         tier_info = {
             "current": current_tier,
             "next": next_tier,
             "next_gap": round(next_tier["threshold"] - score, 0) if next_tier else None,
             "all_tiers": all_tiers,
+            "target_university": target_university,
+            "target_line": target_line,
+            "target_gap": target_gap,
+        }
+
+    # 无院校层次参考但有目标院校时，构建最小 tier_info
+    if tier_info is None and target_university:
+        tier_info = {
+            "current": None,
+            "next": None,
+            "next_gap": None,
+            "all_tiers": [],
             "target_university": target_university,
             "target_line": target_line,
             "target_gap": target_gap,
@@ -397,7 +408,7 @@ def render_personal(data, env):
     template = env.get_template("report_personal.html")
     return template.render(
         generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
-        equivalent_score=f"{ewma_score:.0f} 分" if ewma_score else "暂无",
+        equivalent_score=f"{latest_equiv:.0f} 分" if latest_equiv else "暂无",
         confidence=latest.get("置信度", "-"),
         method=latest.get("主计算方法", "-"),
         calc_detail=latest_calc_detail,
@@ -412,10 +423,6 @@ def render_personal(data, env):
         volatility_upper=vol_high or "-",
         sigma=f"{sigma}分" if sigma else "-",
         volatility_style=volatility_style or "-",
-        target_university=None,
-        gap_text="",
-        gap_class="",
-        admission_lines=[],
         hierarchy_refs=None,
         tier_info=tier_info,
         disclaimer=DISCLAIMER,
@@ -473,21 +480,24 @@ def render_trend(data, env):
     labels, label_sequence = eval_labels(eq_scores) if len(eq_scores) >= 4 else (None, None)
     volatility_style = classify_volatility_style(labels, sigma, label_sequence) if has_analysis else None
 
-    # Cross validations summary
+    # Cross validations summary — extract both method 1 and method 2
     cross_validations = []
     for r in eq_records:
-        if r.get("交叉验证方法1") and r.get("交叉验证分1"):
-            diff = None
-            primary = float(r.get("等效分（融合结果）", 0)) if r.get("等效分（融合结果）") else None
-            cv_score = float(r["交叉验证分1"])
-            if primary:
-                diff = f"{cv_score - primary:+.1f}"
-            cross_validations.append({
-                "exam": r.get("考试名", "-"),
-                "method": r["交叉验证方法1"],
-                "score": r["交叉验证分1"],
-                "diff": diff or "-",
-            })
+        for cv_num in ("1", "2"):
+            cv_method = r.get(f"交叉验证方法{cv_num}")
+            cv_score = r.get(f"交叉验证分{cv_num}")
+            if cv_method and cv_score:
+                diff = None
+                primary = float(r.get("等效分（融合结果）", 0)) if r.get("等效分（融合结果）") else None
+                cv_score_f = float(cv_score)
+                if primary:
+                    diff = f"{cv_score_f - primary:+.1f}"
+                cross_validations.append({
+                    "exam": r.get("考试名", "-"),
+                    "method": cv_method,
+                    "score": cv_score,
+                    "diff": diff or "-",
+                })
 
     template = env.get_template("report_trend.html")
     return template.render(

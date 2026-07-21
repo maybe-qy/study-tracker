@@ -96,10 +96,11 @@
   </div>
   {% endif %}
 
-  {% if tier_info and tier_info.current %}
+  {% if tier_info %}
   <div class="section">
     <div class="section-title">院校定位</div>
 
+    {% if tier_info.current %}
     <div style="background:#f0f7ff;border-radius:8px;padding:12px 16px;margin-bottom:8px;">
       <div style="font-size:13px;color:#64748b;margin-bottom:2px;">当前梯队</div>
       <div style="font-size:16px;font-weight:600;color:#1e40af;">{{ tier_info.current.name }}</div>
@@ -112,6 +113,7 @@
       <span class="stat-value" style="color:#f59e0b;">还差 {{ tier_info.next_gap|int }} 分</span>
     </div>
     {% endif %}
+    {% endif %}
 
     {% if tier_info.target_university %}
     <div class="stat-row" style="margin-top:8px;padding-top:8px;border-top:1px solid #f1f5f9;">
@@ -122,6 +124,7 @@
     </div>
     {% endif %}
 
+    {% if tier_info.current and tier_info.all_tiers %}
     <details style="margin-top:8px;">
       <summary style="font-size:12px;color:#94a3b8;cursor:pointer;">梯队一览</summary>
       <div style="margin-top:8px;">
@@ -133,6 +136,7 @@
         {% endfor %}
       </div>
     </details>
+    {% endif %}
   </div>
   {% endif %}
 

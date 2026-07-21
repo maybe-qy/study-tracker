@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 """Calculate equivalent Gaokao score using all available methods.
 
-Priority order (fixed ranking):
-  1. 分数线对照法/等比例放缩法 (Score-line comparison) — A级
-  2. 校内排名对照法 (School ranking lookup) — A级
-  3. 排名锚定法 (Percentile anchoring) — A级，交叉验证
-  4. 校排名估算 (School rank estimation) — C级
+Priority order (fixed ranking, first available wins as primary):
+  1. 双模块换算法 (Two-module) — A/B级
+  2. 分数线对照法/等比例放缩法 (Score-line comparison) — A级
+  3. 校排阈值估算法 (School threshold estimation) — B级
+  4. 校内排名对照法 (School ranking lookup) — A级
+  5. 排名锚定法 (Percentile anchoring) — A级，交叉验证
+  6. 校排名估算 (School rank estimation) — C级
 
 Confidence is A/B/C/D four levels, determined by data source and method.
-Primary method determines the equivalent score; other methods serve as cross-validation.
-Weights (A=1.0, B=0.8, C=0.5, D=0) are used only for trend/volatility analysis.
+All available methods participate in weighted fusion by confidence.
+Weights (A=1.0, B=0.8, C=0.5, D=0).
 
 Input: JSON via stdin
 Output: JSON with equivalent score, confidence, error range, cross-validations
@@ -428,7 +430,6 @@ def method_two_module(data, macro):
                               f"（{prev['score']}分×{discount:.2f}={sub_eq}分, C级）")
                 else:
                     # Use school对照表 or rough estimate
-                    raw = float(subj.get("raw", 0))
                     sub_eq = round(GK_SUB_SPECIAL * raw / 100, 1) if raw else None
                     conf = "D"
                     detail = f"{name}无任何参照数据 → 粗略估算{sub_eq}分(D级)"
@@ -541,7 +542,7 @@ def method_school_threshold(data, macro):
     ratio = (student_450 - te_line) / (zd_line - te_line)
     estimated_rank = int(te_rank - ratio * (te_rank - zd_rank))
 
-    # Get school total from 结构 sheet (default 835)
+    # Get school total from 结构 sheet (富阳中学默认835，会被sheet数据覆盖)
     school_total = 835
     for key in macro:
         if "期末" in str(key) and "结构" in str(key):
@@ -551,7 +552,7 @@ def method_school_threshold(data, macro):
                     text = str(vals[0]) if vals[0] else ""
                     if "全校" in text:
                         try:
-                            school_total = int(str(vals[1]).replace("人", "").rstrip("人"))
+                            school_total = int(str(vals[1]).replace("人", ""))
                         except (ValueError, TypeError):
                             pass
             break
@@ -792,6 +793,84 @@ def _find_previous_subject_data(workspace, subject_name, current_exam_name):
     return None
 
 
+def compute_independent_subject_sum(data, macro):
+    """Compute subject sum independently for fusion.
+
+    Uses 分数线对照法 for 语数英 (independent of primary total method)
+    and 赋分直映 for 选科. This produces an estimate that can diverge
+    from the total methods, making weighted fusion meaningful.
+
+    Returns dict {"sum": float, "confidences": [str]} or None.
+    """
+    subjects = data.get("subjects", [])
+    total_score = float(data.get("total_score", 0))
+    special_line_exam = data.get("special_line_exam") or data.get("special_line")
+
+    if not subjects or not total_score:
+        return None
+
+    # 语数英: use 分数线对照法 (same formula as method_score_line)
+    main_raw = 0.0
+    for subj in subjects:
+        name = subj.get("name", "")
+        raw = subj.get("raw")
+        if name in ("语文", "数学", "英语") and raw is not None:
+            main_raw += float(raw)
+
+    if main_raw <= 0:
+        return None
+
+    special_lines = macro.get("特控线", [])
+    gaokao_sl = None
+    latest_year = -1
+    for sl in special_lines:
+        if sl.get("特控线分数"):
+            year = int(sl.get("年份", 0))
+            if year > latest_year:
+                latest_year = year
+                gaokao_sl = float(sl["特控线分数"])
+
+    if not gaokao_sl or not special_line_exam:
+        return None
+
+    sl_exam = float(special_line_exam)
+    if sl_exam >= 750:
+        return None
+
+    # 分数线对照法 applied to total, then allocate 语数英 portion
+    if total_score >= 750:
+        total_via_sl = 750.0
+    else:
+        total_via_sl = (750 - gaokao_sl) / (750 - sl_exam) * (total_score - sl_exam) + gaokao_sl
+
+    original_total = data.get("_original_total_score", total_score)
+    main_ratio = main_raw / original_total if original_total else 0
+    main_eq = main_ratio * total_via_sl
+
+    # 选科: 赋分直映
+    subject_sum = main_eq
+    confidences = []
+    # 语数英 via 分数线对照法 → A级 (3 subjects)
+    for subj in subjects:
+        name = subj.get("name", "")
+        if name in ("语文", "数学", "英语") and subj.get("raw") is not None:
+            confidences.append("A")
+
+    for subj in subjects:
+        name = subj.get("name", "")
+        if name in ("语文", "数学", "英语"):
+            continue
+        assigned = subj.get("assigned")
+        if assigned:
+            subject_sum += float(assigned)
+            confidences.append("B")
+
+    if not confidences:
+        return None
+
+    return {"sum": round(subject_sum, 1), "confidences": confidences}
+
+
 def run(data):
     workspace = os.path.abspath(data.get("workspace", "."))
 
@@ -920,42 +999,44 @@ def run(data):
                         "等效分可能存在偏差"
                     )
 
-    # ── 单科等效分（含跨次回退，在函数内部处理）──
+    # ── 单科等效分（展示用，从总分比例分配，保证各科之和=总分）──
     data["_total_equivalent"] = equivalent_score
     subject_scores = compute_subject_equivalents(data, macro, original_total_score)
 
     # ── 多方法加权融合 ──
-    # 融合公式：所有方法 + 单科加总按置信度权重加权平均
-    # 单科加总衰减因子从 0.7 降至 0.5，降低其在融合中的比重
-    subject_sum = sum(s["score"] for s in subject_scores if s["score"])
-    if subject_scores and subject_sum:
-        subject_weights = [weights_map.get(s["confidence"], 0) for s in subject_scores if s["score"]]
-        w_subject = (sum(subject_weights) / len(subject_weights) * 0.5) if subject_weights else 0
+    # 融合公式：所有可用方法 + 单科加总按置信度权重加权平均
+    # 单科加总独立计算（语数英用分数线对照法，选科赋分直映），
+    # 不与总分法恒等，确保融合产生有意义的交叉校验
+    # 单科加总衰减因子 0.5，降低其在融合中的比重
+    independent_subj = compute_independent_subject_sum(data, macro)
 
-        # Collect all method scores + subject_sum with weights
-        components = []  # [(score, weight, label), ...]
-        for m in methods:
-            w = weights_map.get(m["confidence"], 0)
-            if w > 0:
-                components.append((m["score"], w, m["method"]))
+    components = []  # [(score, weight, label), ...]
+    for m in methods:
+        w = weights_map.get(m["confidence"], 0)
+        if w > 0:
+            components.append((m["score"], w, m["method"]))
 
+    if independent_subj:
+        subj_confs = independent_subj["confidences"]
+        subj_weights = [weights_map.get(c, 0) for c in subj_confs]
+        w_subject = (sum(subj_weights) / len(subj_weights) * 0.5) if subj_weights else 0
         if w_subject > 0:
-            components.append((subject_sum, w_subject, "单科加总"))
+            components.append((independent_subj["sum"], w_subject, "单科加总"))
 
-        if len(components) >= 2:
-            weighted_sum = sum(s * w for s, w, _ in components)
-            total_weight = sum(w for _, w, _ in components)
-            fused = round(weighted_sum / total_weight, 1)
+    if len(components) >= 2:
+        weighted_sum = sum(s * w for s, w, _ in components)
+        total_weight = sum(w for _, w, _ in components)
+        fused = round(weighted_sum / total_weight, 1)
 
-            parts = [f"{label}{score}分(w={w:.2f})" for score, w, label in components]
-            calculation_detail += f" | [融合] {' + '.join(parts)} → {fused}分"
+        parts = [f"{label}{score}分(w={w:.2f})" for score, w, label in components]
+        calculation_detail += f" | [融合] {' + '.join(parts)} → {fused}分"
 
-            equivalent_score = fused
-            # 误差区间基于融合分 ± 最大方法间偏差
-            all_scores = [s for s, _, _ in components]
-            max_dev = max(abs(fused - s) for s in all_scores)
-            error_lower = round(fused - max(margin, max_dev + 3), 1)
-            error_upper = round(fused + max(margin, max_dev + 3), 1)
+        equivalent_score = fused
+        # 误差区间基于融合分 ± 最大方法间偏差
+        all_scores = [s for s, _, _ in components]
+        max_dev = max(abs(fused - s) for s in all_scores)
+        error_lower = round(fused - max(margin, max_dev + 3), 1)
+        error_upper = round(fused + max(margin, max_dev + 3), 1)
 
     result = {
         "status": "ok",

@@ -1,5 +1,77 @@
 # Changelog
 
+## 2026-07-22 — v3.1.3 全面审计修复：融合空操作修正 + 文档同步 (13项)
+
+### 严重修复
+- 融合逻辑修正：新增 `compute_independent_subject_sum()`，单科加总独立于总分法计算（语数英用分数线对照法，选科赋分直映），打破 subject_sum ≡ total_equivalent 的数学恒等式
+- 多方法融合扩展：不再依赖 subject_sum 存在才融合，任意 ≥2 个方法即可加权融合
+
+### 文档重排
+- `calculation_methods.md` 完整重写：方法编号按优先级统一（方法一~六），消除重复编号和嵌套错误
+- `calc_equivalent.py` docstring 更新：从4方法扩展为6方法
+
+### 数据展示修复
+- 个人报告等效分改为显示 latest 测量值（非 EWMA），与误差区间一致
+- 目标院校在无院校层次参考数据时也能展示
+- 趋势报告交叉验证同时提取方法1和方法2
+
+### 残留清理
+- 删除所有"个人信息"功能残留引用（SKILL.md、DISCLAIMER、interaction_examples.md）
+- 删除 SKILL.md 未实现的"最低分"展示承诺
+- 更新 interaction_examples.md 过时的方法描述
+
+### 代码清理
+- 删除 `method_two_module` 中冗余的 raw 变量覆盖
+- 删除 `method_school_threshold` 中冗余的 `.rstrip("人")`
+- 添加 `school_total=835` 默认值的注释说明
+
+### 更新文件
+| 文件 | 变更 |
+|------|------|
+| `src/scripts/calc_equivalent.py` | 融合重构、docstring更新、冗余代码清理 |
+| `src/scripts/generate_reports.py` | EWMA→latest、目标院校展示、交叉验证2、DISCLAIMER清理 |
+| `src/assets/report_personal.html` | 目标院校独立展示（不依赖院校层次数据）|
+| `src/SKILL.md` | 个人信息残留删除、最低分描述删除 |
+| `src/references/calculation_methods.md` | 完整重写（方法编号统一）|
+| `src/references/interaction_examples.md` | 个人信息对话删除、方法描述更新 |
+| `CHANGELOG.md` | v3.1.x 版本记录补全 |
+
+## 2026-07-21 — v3.1.2 个人档案展示计算过程
+
+- 个人档案报告展示等效分计算详情（`calculation_detail` 字段）
+- 从 latest 记录的"详细信息" JSON 中提取计算过程
+
+## 2026-07-21 — v3.1.1 趋势报告展示计算过程 & 富阳Sheet命名规范 & 期末Context匹配
+
+- 趋势报告展示每次考试的等效分计算详情
+- 升级 Sheet 命名规范化：支持"富阳"前缀匹配
+- 期末 Context 匹配：双模块换算法和校排阈值法仅在期末考试时触发
+
+## 2026-07-21 — v3.1 双模块换算法重构：语数英+选科独立换算 & 多方法加权融合
+
+### 双模块换算法（新增，优先级1）
+- 拆分语数英（450分）和选科（100分/科）两个独立模块
+- 模块一：语数英用校内特控线/浙大线 → 高考目标 340/378 比例换算
+- 模块二：选科三级优先级（双线换算A→单线换算B→跨次回退/赋分C）
+- 高考参考目标基于 2025 浙江高考各科均衡目标的中点
+
+### 校排阈值估算法（新增，优先级3）
+- 利用校内特控线+浙大线对应的校内排名，线性插值反推学生排名
+- 学校类型系数估算全市排名 → 一分一段表 → 等效分
+
+### 单科等效分体系
+- 选科：赋分直映 → 校内对照 → 跨次回退（0.85折扣因子）
+- 语数英：从总等效分减去选科贡献后，按原始分比例分配
+
+### 更新文件
+| 文件 | 变更 |
+|------|------|
+| `src/scripts/calc_equivalent.py` | 双模块换算法、校排阈值法、单科等效分重构 |
+| `src/scripts/generate_reports.py` | 计算详情展示、置信度展示 |
+| `src/SKILL.md` | 双模块换算法文档、新优先级表 |
+| `src/references/calculation_methods.md` | 新增双模块、校排阈值方法文档 |
+| `CLAUDE.md` | 优先级表更新、双模块换算法说明 |
+
 ## 2026-07-21 — v3.0 置信度体系重构: 4级(A/B/C/D) + 单一主方法 + 单科等效分
 
 ### 置信度扩展为四级
