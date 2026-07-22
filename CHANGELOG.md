@@ -1,5 +1,73 @@
 # Changelog
 
+## 2026-07-22 — v3.2.2 第二次模型审查修复（5个P1问题）
+
+### 严重修复
+- **人数校准法缺失重点班校准**：`method_population_calibration` 未像 `method_school_lookup` 那样补回重点班未参考人数 → 新增 `calibrated_rank = int(school_rank) + unexamined_top`
+- **单科数据读取匹配错误Sheet**：`read_school_subject_data` 会误匹配 `本校对照表_总分` → 新增 `if sname == "本校对照表_总分": continue` 并要求 Sheet 名包含"单科"
+- **独立选科求和未过滤None**：`compute_independent_subject_sum` 中特控线数据含 None 导致崩溃 → 新增 `_filter_numeric_rows(..., "特控线分数")`
+- **Sheet名不匹配**：`_SHEET_KEY_MAP` 中"省内高校录取线"无法匹配"院校层次"关键词 → 重命名为 `院校层次_录取线`
+- **create_excel非幂等**：重复运行会追加表头 → 新增 `load_workbook(read_only=True)` 检查 `ws.max_row > 1`
+
+### 更新文件
+| 文件 | 变更 |
+|------|------|
+| `src/scripts/calc_equivalent.py` | 重点班校准、单科Sheet过滤、None过滤、Sheet名修正 |
+| `src/scripts/setup_workspace.py` | Sheet重命名、create_excel幂等性 |
+
+## 2026-07-22 — v3.2.1 全盘检查修复（10个问题）
+
+### 严重修复
+- **build_row()元素数不匹配**：返回28个元素但EXCEL_COLS有30列 → 补充 `school_type`、`rank_type` 映射
+- **单科排名对照法数据结构错误**：访问 `subject_rank_data[name]` 但实际结构为 `{"rank_scores": {...}}` → 改为 `.get("rank_scores", {})`
+- **_SHEET_KEY_MAP键名不匹配**：`"对照": "对照"` 但消费方使用 `macro.get("本校对照表_总分")` → 修正映射为 `"对照": "本校对照表_总分"`
+- **_json未定义NameError**：`except (_json.JSONDecodeError, TypeError)` 引用未导入的 `_json` → 改为 `json.JSONDecodeError`
+- **排序方向冲突（I4）**：`reverse=True` 导致 `eq_records[-1]` 取到最旧记录而非最新 → 改为内部升序 `reverse=False`，仅在展示时反转
+
+### 数据展示修复
+- 趋势报告展示前反转考试列表（最新在前），内部分析保持升序
+- 个人报告使用 `eq_records[-1]` 取最新记录（依赖升序排序）
+- 单科报告展示前反转记录列表
+
+### 代码清理
+- 清理 `save_equivalent.py` 中重复的 `import json as _json`，统一使用模块级 `import json`
+- 所有 `json.JSONDecodeError` 统一引用
+
+### 更新文件
+| 文件 | 变更 |
+|------|------|
+| `src/scripts/record_exam.py` | build_row()补全30列 |
+| `src/scripts/calc_equivalent.py` | 单科数据结构修复、_SHEET_KEY_MAP修正、_json修复 |
+| `src/scripts/save_equivalent.py` | import清理、JSON异常统一 |
+| `src/scripts/generate_reports.py` | 排序方向修正、展示反转逻辑 |
+
+## 2026-07-22 — v3.2.0 16条Issue全量修复 + 人数校准法 + 单科排名对照法
+
+### 新增计算方法
+- **人数校准法（优先级2，B级）**：利用校内门槛上线人数与高考一分一段表的映射关系，校准系数 k = 高考特控线人数/校内特控线上线人数。实测精度从C级平均偏低81分提升到与A级仅差5-10分
+- **单科排名对照法（优先级6，A级）**：利用单科对照表将校内单科排名映射到高考单科等效分
+
+### 严重修复（16条Issue）
+- **I1 Sheet名硬编码**：`read_macro_data()` 使用精确Sheet名 → 新增 `find_sheet()` 模糊匹配 + `_SHEET_KEY_MAP` 映射表
+- **I2 None值崩溃**：一分一段表含元数据行导致 `int(None)` → 新增 `_filter_numeric_rows(rows, key_field)` 过滤
+- **I3 标题行错位**：真实Excel标题在第1行、表头在第2行 → 新增 `_is_header_row()` 检测 + `_KNOWN_COLUMN_KEYWORDS`
+- **I5 置信度"级"重复**：存储"B级"且模板追加"级" → 存储为"B"，模板渲染时追加"级"
+- **I6 calculation_detail类型不一致**：计算模块输出list，模板调用 `.split('|')` → 统一为字符串，用 `|` 分隔
+- **I7 subject_scores结构不一致**：save模块允许dict，render期望list-of-dict → 两端统一类型转换
+- **I8-I16**：报告排序、目标院校展示、置信度颜色编码、method_switch检测等
+
+### 更新文件
+| 文件 | 变更 |
+|------|------|
+| `src/scripts/calc_equivalent.py` | find_sheet()、_filter_numeric_rows()、_is_header_row()、人数校准法、单科排名对照法 |
+| `src/scripts/save_equivalent.py` | 置信度去"级"、calculation_detail统一、subject_scores统一 |
+| `src/scripts/generate_reports.py` | 类型防御检查、method_switch检测、展示排序反转 |
+| `src/scripts/record_exam.py` | EXCEL_COLS扩展至30列 |
+| `src/scripts/setup_workspace.py` | HEADERS扩展至30列、MACRO_SHEETS更新 |
+| `src/assets/report_trend.html` | 置信度颜色CSS、method_switch徽章 |
+
+
+
 ## 2026-07-22 — v3.1.3 全面审计修复：融合空操作修正 + 文档同步 (13项)
 
 ### 严重修复
