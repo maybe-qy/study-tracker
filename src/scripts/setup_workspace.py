@@ -50,7 +50,7 @@ MACRO_SHEETS = {
     "特控线": ["年份", "省份", "特控线分数"],
     "赋分区间": ["省份", "等级", "最低分", "最高分"],
     "本校对照表_总分": ["校内排名", "高考总分"],
-    "省内高校录取线": ["院校名称", "年份", "录取最低分", "录取最低位次"],
+    "院校层次_录取线": ["院校名称", "年份", "录取最低分", "录取最低位次"],
 }
 
 SCHOOL_SHEETS = {
@@ -73,11 +73,25 @@ def create_dirs(workspace):
 
 
 def create_excel(path, sheet_headers):
-    """Create an Excel file with headers. sheet_headers is {sheet_name: [headers]}."""
-    from openpyxl import Workbook
+    """Create an Excel file with headers. sheet_headers is {sheet_name: [headers]}.
+
+    Idempotency: skip if file exists AND has data (row count > 1).
+    Recreate if file exists but only has headers (row count == 1 or file is empty).
+    """
+    from openpyxl import load_workbook, Workbook
 
     if os.path.exists(path):
-        return None  # Don't overwrite
+        # Check if file has actual data (not just headers)
+        try:
+            existing = load_workbook(path, data_only=True, read_only=True)
+            has_data = any(ws.max_row > 1 for ws in existing.worksheets)
+            existing.close()
+            if has_data:
+                return None  # Don't overwrite existing data
+            # Else: file exists but only has headers, will recreate
+        except Exception:
+            # If file is corrupted, try to recreate
+            pass
 
     wb = Workbook()
     first = True

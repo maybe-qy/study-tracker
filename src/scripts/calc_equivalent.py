@@ -348,6 +348,10 @@ def method_population_calibration(data, macro):
     if not school_rank:
         return None
 
+    # 应用班型校准（重点班未参考人数），与 method_school_lookup 一致
+    unexamined_top = int(data.get("unexamined_top_students", 0) or 0)
+    calibrated_rank = int(school_rank) + unexamined_top
+
     # 从门槛Sheet读取特控线上线人数
     threshold_sheet = None
     for key in ("门槛", "升级"):
@@ -409,7 +413,7 @@ def method_population_calibration(data, macro):
 
     # 校准系数
     k = gaokao_count / school_teckong_count
-    city_rank = int(int(school_rank) * k)
+    city_rank = int(calibrated_rank * k)
     max_count = max(int(r.get("累计人数", 0)) for r in sorted_table)
     city_rank = min(city_rank, max_count)
 
@@ -429,7 +433,7 @@ def method_population_calibration(data, macro):
         "method": "人数校准法",
         "score": round(best_score, 1),
         "confidence": "B",
-        "detail": f"校内排名{school_rank} × k({k:.1f}) → 高考排名{city_rank} → 等效分{best_score:.0f}",
+        "detail": f"校内排名{school_rank}（含重点班校准{unexamined_top}人） × k({k:.1f}) → 高考排名{city_rank} → 等效分{best_score:.0f}",
     }
 
 
@@ -873,7 +877,11 @@ def read_school_subject_data(macro):
 
     for sheet_key in macro:
         sname = str(sheet_key)
-        if not ("本" in sname and "对照" in sname and "总分" in sname):
+        # 排除标准总分对照表（由 method_school_lookup 使用）
+        if sname == "本校对照表_总分":
+            continue
+        # 匹配单科对照表（含"单科"+"对照"关键字）
+        if not ("单科" in sname and "对照" in sname):
             continue
 
         for row in macro[sheet_key]:
@@ -1087,15 +1095,14 @@ def compute_independent_subject_sum(data, macro):
     if main_raw <= 0:
         return None
 
-    special_lines = macro.get("特控线", [])
+    special_lines = _filter_numeric_rows(macro.get("特控线", []), "特控线分数")
     gaokao_sl = None
     latest_year = -1
     for sl in special_lines:
-        if sl.get("特控线分数"):
-            year = int(sl.get("年份", 0))
-            if year > latest_year:
-                latest_year = year
-                gaokao_sl = float(sl["特控线分数"])
+        year = int(sl.get("年份", 0))
+        if year > latest_year:
+            latest_year = year
+            gaokao_sl = float(sl["特控线分数"])
 
     if not gaokao_sl or not special_line_exam:
         return None

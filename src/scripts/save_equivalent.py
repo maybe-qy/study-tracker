@@ -46,8 +46,6 @@ def run(workspace, exam_name, exam_date, calc_result, target_university=None, ta
     if target_line and calc_result.get("equivalent_score"):
         gap = round(calc_result["equivalent_score"] - float(target_line), 1)
 
-    import json as _json
-
     # I5: 去掉置信度中的"级"后缀，存储纯 A/B/C/D
     confidence = str(calc_result.get("confidence", "")).replace("级", "")
 
@@ -65,7 +63,7 @@ def run(workspace, exam_name, exam_date, calc_result, target_university=None, ta
     elif not isinstance(subject_scores, list):
         subject_scores = []
 
-    extra_info = _json.dumps({
+    extra_info = json.dumps({
         "subject_scores": subject_scores,
         "warnings": calc_result.get("warnings", []),
         "trust_note": calc_result.get("trust_note"),
