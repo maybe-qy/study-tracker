@@ -3,11 +3,12 @@
 
 Priority order (fixed ranking, first available wins as primary):
   1. 双模块换算法 (Two-module) — A/B级
-  2. 分数线对照法/等比例放缩法 (Score-line comparison) — A级
-  3. 校排阈值估算法 (School threshold estimation) — B级
-  4. 校内排名对照法 (School ranking lookup) — A级
-  5. 排名锚定法 (Percentile anchoring) — A级，交叉验证
-  6. 校排名估算 (School rank estimation) — C级
+  2. 人数校准法 (Population calibration) — B级
+  3. 分数线对照法/等比例放缩法 (Score-line comparison) — A级
+  4. 校排阈值估算法 (School threshold estimation) — B级
+  5. 校内排名对照法 (School ranking lookup) — A级
+  6. 排名锚定法 (Percentile anchoring) — A级，交叉验证
+  7. 校排名估算 (School rank estimation) — C级
 
 Confidence is A/B/C/D four levels, determined by data source and method.
 All available methods participate in weighted fusion by confidence.
@@ -24,19 +25,86 @@ import sys
 from openpyxl import load_workbook
 
 
-def read_sheet_rows(ws):
-    """Read all rows from a worksheet as list of dicts (header row is row 1)."""
+# 已知列名关键词集合，用于检测第1行是标题还是表头
+_KNOWN_COLUMN_KEYWORDS = {"分数", "排名", "累计人数", "年份", "人数", "特控线", "上线", "下限", "上限", "科目", "得分", "等效分", "原始分", "赋分", "总分", "成绩", "名称", "score", "rank", "count", "year", "name"}
+
+
+def _is_header_row(row_values):
+    """检测第一行是否为表头行（而非标题行）。"""
+    if not row_values:
+        return False
+    first = str(row_values[0]).strip() if row_values[0] else ""
+    if not first:
+        return False
+    # 如果第一列值在已知列名集合中，认为是表头
+    if first in _KNOWN_COLUMN_KEYWORDS:
+        return True
+    for kw in _KNOWN_COLUMN_KEYWORDS:
+        if kw in first:
+            return True
+    # 如果第一行超过2个值都在已知列名集合中，也认为是表头
+    hits = 0
+    for v in row_values:
+        if v is None:
+            continue
+        sv = str(v).strip()
+        if sv in _KNOWN_COLUMN_KEYWORDS:
+            hits += 1
+        else:
+            for kw in _KNOWN_COLUMN_KEYWORDS:
+                if kw in sv:
+                    hits += 1
+                    break
+    if hits >= 2:
+        return True
+    return False
+
+
+def read_sheet_rows(ws, skip_title_row=True):
+    """Read all rows from a worksheet as list of dicts.
+
+    Args:
+        ws: openpyxl worksheet
+        skip_title_row: if True, auto-detect and skip title rows before the header row
+    """
     if ws.max_row < 2:
         return []
-    headers = [cell.value for cell in ws[1]]
+    header_row_idx = 1
+    if skip_title_row and ws.max_row >= 3:
+        row1_vals = tuple(cell.value for cell in ws[1])
+        if not _is_header_row(row1_vals):
+            row2_vals = tuple(cell.value for cell in ws[2]) if ws.max_row >= 3 else None
+            if row2_vals and _is_header_row(row2_vals):
+                header_row_idx = 2
+    headers = [str(cell.value) if cell.value is not None else f"col_{i}" for i, cell in enumerate(ws[header_row_idx])]
     rows = []
-    for row in ws.iter_rows(min_row=2, values_only=True):
+    for row in ws.iter_rows(min_row=header_row_idx + 1, values_only=True):
         rows.append(dict(zip(headers, row)))
     return rows
 
 
+def find_sheet(sheets, keyword):
+    """Find first sheet name containing keyword (case-insensitive fuzzy match)."""
+    for name in sheets:
+        if keyword.lower() in name.lower():
+            return name
+    return None
+
+
+# 宏观数据Sheet名关键词映射
+_SHEET_KEY_MAP = {
+    "特控线": "特控线",
+    "一分一段": "一分一段表",
+    "赋分区间": "赋分区间",
+    "对照": "对照",
+    "门槛": "门槛",
+    "升级": "升级",
+    "院校层次": "院校层次",
+}
+
+
 def read_macro_data(workspace):
-    """Read all macro data sheets."""
+    """Read all macro data sheets with fuzzy sheet name matching."""
     path = os.path.join(workspace, "data", "macro", "宏观数据_只读.xlsx")
     if not os.path.exists(path):
         path = os.path.join(workspace, "data", "macro", "宏观数据.xlsx")
@@ -44,9 +112,24 @@ def read_macro_data(workspace):
         return None
     wb = load_workbook(path, data_only=True)
     data = {}
+    # 先用模糊匹配定位关键Sheet
+    matched = set()
+    for key, display_name in _SHEET_KEY_MAP.items():
+        found = find_sheet(wb.sheetnames, key)
+        if found:
+            data[display_name] = read_sheet_rows(wb[found])
+            matched.add(found)
+    # 其余Sheet保留原名
     for name in wb.sheetnames:
-        data[name] = read_sheet_rows(wb[name])
+        if name not in matched:
+            data[name] = read_sheet_rows(wb[name])
+    wb.close()
     return data
+
+
+def _filter_numeric_rows(rows, key_field):
+    """Filter rows to only those where key_field is numeric."""
+    return [r for r in rows if isinstance(r.get(key_field), (int, float))]
 
 
 def method_score_line(data, macro):
@@ -55,7 +138,7 @@ def method_score_line(data, macro):
     if not special_line_exam:
         return None
 
-    special_lines = macro.get("特控线", [])
+    special_lines = _filter_numeric_rows(macro.get("特控线", []), "特控线分数")
     if not special_lines:
         return None
 
@@ -164,7 +247,7 @@ def method_percentile(data, macro):
         return None
 
     percentile = 1.0 - (rank / total)
-    score_table = macro.get("一分一段表", [])
+    score_table = _filter_numeric_rows(macro.get("一分一段表", []), "累计人数")
     if not score_table:
         return None
 
@@ -214,7 +297,7 @@ def method_school_estimate(data, macro):
     if macro.get("本校对照表_总分"):
         return None
 
-    score_table = macro.get("一分一段表", [])
+    score_table = _filter_numeric_rows(macro.get("一分一段表", []), "累计人数")
     if not score_table:
         return None
     max_count = max(int(r.get("累计人数", 0)) for r in score_table)
@@ -252,6 +335,104 @@ def method_school_estimate(data, macro):
     }
 
 
+def method_population_calibration(data, macro):
+    """人数校准法 (Population calibration) — B级.
+
+    利用校内门槛上线人数与高考一分一段表的人数映射关系，
+    将校内排名转换为高考排名，再查一分一段表得到等效分。
+
+    适用条件：有校内排名 + 门槛Sheet中有"特控线上线人数"
+    置信度：B级（高于C级校排名估算，低于A级分数线对照）
+    """
+    school_rank = data.get("school_rank")
+    if not school_rank:
+        return None
+
+    # 从门槛Sheet读取特控线上线人数
+    threshold_sheet = None
+    for key in ("门槛", "升级"):
+        for name, sheet_data in macro.items():
+            if key in name:
+                threshold_sheet = sheet_data
+                break
+        if threshold_sheet:
+            break
+
+    if not threshold_sheet:
+        return None
+
+    school_teckong_count = None
+    for row in threshold_sheet:
+        for k, v in row.items():
+            if "特控" in str(k) and "上线" in str(k) and isinstance(v, (int, float)):
+                school_teckong_count = int(v)
+                break
+        if school_teckong_count:
+            break
+
+    if not school_teckong_count:
+        return None
+
+    # 高考特控线对应人数（从一分一段表查）
+    special_lines = _filter_numeric_rows(macro.get("特控线", []), "特控线分数")
+    if not special_lines:
+        return None
+
+    latest_year = -1
+    gaokao_line = None
+    for sl in special_lines:
+        year = int(sl.get("年份", 0))
+        if year > latest_year:
+            latest_year = year
+            gaokao_line = float(sl["特控线分数"])
+
+    if not gaokao_line:
+        return None
+
+    score_table = _filter_numeric_rows(macro.get("一分一段表", []), "累计人数")
+    if not score_table:
+        return None
+
+    # 查找高考特控线对应的累计人数
+    sorted_table = sorted(score_table, key=lambda r: int(r.get("分数", 0)), reverse=True)
+    gaokao_count = None
+    best_diff = float("inf")
+    for row in sorted_table:
+        score = float(row.get("分数", 0))
+        diff = abs(score - gaokao_line)
+        if diff < best_diff:
+            best_diff = diff
+            gaokao_count = int(row.get("累计人数", 0))
+
+    if not gaokao_count:
+        return None
+
+    # 校准系数
+    k = gaokao_count / school_teckong_count
+    city_rank = int(int(school_rank) * k)
+    max_count = max(int(r.get("累计人数", 0)) for r in sorted_table)
+    city_rank = min(city_rank, max_count)
+
+    # 在排序表中查找最接近的排名对应的分数
+    best_score = None
+    best_diff = float("inf")
+    for row in sorted_table:
+        diff = abs(int(row.get("累计人数", 0)) - city_rank)
+        if diff < best_diff:
+            best_diff = diff
+            best_score = float(row.get("分数", 0))
+
+    if best_score is None:
+        return None
+
+    return {
+        "method": "人数校准法",
+        "score": round(best_score, 1),
+        "confidence": "B",
+        "detail": f"校内排名{school_rank} × k({k:.1f}) → 高考排名{city_rank} → 等效分{best_score:.0f}",
+    }
+
+
 def method_two_module(data, macro):
     """Method 0: 双模块独立换算法 — A/B级，最高优先级.
 
@@ -279,16 +460,32 @@ def method_two_module(data, macro):
 
     wb = load_workbook(path, data_only=True)
 
-    # Only match if exam context aligns (期末 exam ↔ 期末 upgrade sheet)
-    if "期末" not in data.get("exam_name", ""):
-        wb.close()
-        return None
-
+    # Match exam context to upgrade sheet: try exam name keywords first, then fallback
+    exam_name = data.get("exam_name", "")
     ws = None
-    for sn in wb.sheetnames:
-        if "期末" in str(sn) and "升级" in str(sn):
-            ws = wb[sn]
-            break
+    # Priority 1: both "期末" in exam and sheet
+    if "期末" in exam_name:
+        for sn in wb.sheetnames:
+            if "期末" in str(sn) and "升级" in str(sn):
+                ws = wb[sn]
+                break
+    # Priority 2: match other exam keywords (期中, 月考, 联考, etc.)
+    if ws is None:
+        exam_keywords = ["期中", "月考", "联考", "模拟", "统考"]
+        for kw in exam_keywords:
+            if kw in exam_name:
+                for sn in wb.sheetnames:
+                    if kw in str(sn) or "升级" in str(sn):
+                        ws = wb[sn]
+                        break
+                if ws:
+                    break
+    # Priority 3: any sheet with "升级" as fallback
+    if ws is None:
+        for sn in wb.sheetnames:
+            if "升级" in str(sn):
+                ws = wb[sn]
+                break
     if ws is None:
         wb.close()
         return None
@@ -592,6 +789,61 @@ def method_school_threshold(data, macro):
         "score": round(best_score, 1),
         "confidence": "B",
         "detail": f"校内特控线{te_line:.0f}分(=第{te_rank}名), 浙大线{zd_line:.0f}分(=第{zd_rank}名) → 学生{student_450:.0f}分估算校内第{estimated_rank}名 → 等效{best_score:.0f}分",
+    }
+
+
+def method_school_subject_lookup(data, macro):
+    """单科排名对照法 — A级.
+
+    利用宏观数据中的"单科对照"Sheet（校内单科排名→高考等效分映射表），
+    对每个选科用校内单科排名查表得到等效分。
+    """
+    subject_rank_data = read_school_subject_data(macro)
+    if not subject_rank_data:
+        return None
+
+    subjects_input = data.get("subjects", [])
+    subject_results = []
+    for subj in subjects_input:
+        name = subj.get("name", "")
+        subj_rank = subj.get("school_rank")
+        if not subj_rank or name not in subject_rank_data:
+            continue
+        rank_map = subject_rank_data[name]
+        subj_rank = int(subj_rank)
+        # 线性插值查找
+        ranks = sorted(rank_map.keys())
+        if subj_rank <= ranks[0]:
+            eq_score = rank_map[ranks[0]]
+        elif subj_rank >= ranks[-1]:
+            eq_score = rank_map[ranks[-1]]
+        else:
+            for i in range(len(ranks) - 1):
+                if ranks[i] <= subj_rank <= ranks[i + 1]:
+                    ratio = (subj_rank - ranks[i]) / (ranks[i + 1] - ranks[i])
+                    eq_score = rank_map[ranks[i]] + ratio * (rank_map[ranks[i + 1]] - rank_map[ranks[i]])
+                    eq_score = round(eq_score, 1)
+                    break
+            else:
+                continue
+        subject_results.append({
+            "name": name,
+            "equivalent_score": eq_score,
+            "confidence": "A",
+            "detail": f"{name}校内排名{subj_rank} → 单科对照表 → 等效分{eq_score:.0f}",
+        })
+
+    if not subject_results:
+        return None
+
+    # 计算总分等效分 = 各科等效分之和
+    total_eq = sum(r["equivalent_score"] for r in subject_results)
+    return {
+        "method": "单科排名对照法",
+        "score": round(total_eq, 1),
+        "confidence": "A",
+        "detail": " | ".join(r["detail"] for r in subject_results),
+        "subject_scores": subject_results,
     }
 
 
@@ -901,8 +1153,12 @@ def run(data):
 
     methods = []
 
-    # Try methods in priority order: two_module → score_line → school_lookup → percentile → school_estimate
+    # Try methods in priority order: two_module → population_calibration → score_line → school_lookup → percentile → school_estimate
     result = method_two_module(data, macro)
+    if result:
+        methods.append(result)
+
+    result = method_population_calibration(data, macro)
     if result:
         methods.append(result)
 
@@ -915,6 +1171,10 @@ def run(data):
         methods.append(result)
 
     result = method_school_lookup(data, macro)
+    if result:
+        methods.append(result)
+
+    result = method_school_subject_lookup(data, macro)
     if result:
         methods.append(result)
 

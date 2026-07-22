@@ -44,13 +44,45 @@ DISCLAIMER = """声明与局限性
 4. 数据来源：用户上传。"""
 
 
-def read_sheet_dicts(ws):
+# 已知列名关键词集合，用于检测第1行是标题还是表头
+_KNOWN_COLUMN_KEYWORDS = {"分数", "排名", "累计人数", "年份", "人数", "特控线", "上线", "下限", "上限", "科目", "得分", "等效分", "原始分", "赋分", "总分", "成绩", "名称", "考试名", "日期", "置信度", "方法", "score", "rank", "count", "year", "name"}
+
+
+def _is_header_row(row_values):
+    """检测第一行是否为表头行（而非标题行）。"""
+    if not row_values:
+        return False
+    hits = 0
+    for v in row_values:
+        if v is None:
+            continue
+        sv = str(v).strip()
+        if sv in _KNOWN_COLUMN_KEYWORDS:
+            hits += 1
+        else:
+            for kw in _KNOWN_COLUMN_KEYWORDS:
+                if kw in sv:
+                    hits += 1
+                    break
+    if hits >= 2:
+        return True
+    return False
+
+
+def read_sheet_dicts(ws, skip_title_row=True):
     """Read worksheet rows as dicts. Returns empty list if only headers."""
     if ws.max_row < 2:
         return []
-    headers = [str(cell.value) if cell.value is not None else f"col_{i}" for i, cell in enumerate(ws[1])]
+    header_row_idx = 1
+    if skip_title_row and ws.max_row >= 3:
+        row1_vals = tuple(cell.value for cell in ws[1])
+        if not _is_header_row(row1_vals):
+            row2_vals = tuple(cell.value for cell in ws[2]) if ws.max_row >= 3 else None
+            if row2_vals and _is_header_row(row2_vals):
+                header_row_idx = 2
+    headers = [str(cell.value) if cell.value is not None else f"col_{i}" for i, cell in enumerate(ws[header_row_idx])]
     rows = []
-    for row in ws.iter_rows(min_row=2, values_only=True):
+    for row in ws.iter_rows(min_row=header_row_idx + 1, values_only=True):
         d = {}
         for i, val in enumerate(row):
             if i < len(headers):
@@ -63,24 +95,32 @@ def load_data(workspace):
     """Load all Excel data."""
     data = {"exams": [], "equivalent": [], "subjects": {}, "volatility": []}
 
+    def sort_by_date(records, reverse=True):
+        """按日期排序，默认降序（最新的在前）"""
+        def parse_date(d):
+            if not d or not isinstance(d, str):
+                return ""
+            return d.strip()
+        return sorted(records, key=lambda r: parse_date(r.get("日期", "")), reverse=reverse)
+
     # 成绩总表
     path = os.path.join(workspace, "data", "personal", "成绩总表.xlsx")
     if os.path.exists(path):
         wb = load_workbook(path, data_only=True)
-        data["exams"] = read_sheet_dicts(wb["成绩总表"])
+        data["exams"] = sort_by_date(read_sheet_dicts(wb["成绩总表"]))
 
     # 等效分记录
     path = os.path.join(workspace, "data", "personal", "等效分记录.xlsx")
     if os.path.exists(path):
         wb = load_workbook(path, data_only=True)
-        data["equivalent"] = read_sheet_dicts(wb["等效分记录"])
+        data["equivalent"] = sort_by_date(read_sheet_dicts(wb["等效分记录"]))
 
     # 单科追踪
     path = os.path.join(workspace, "data", "personal", "单科追踪.xlsx")
     if os.path.exists(path):
         wb = load_workbook(path, data_only=True)
         for name in wb.sheetnames:
-            data["subjects"][name] = read_sheet_dicts(wb[name])
+            data["subjects"][name] = sort_by_date(read_sheet_dicts(wb[name]))
 
     # 宏观数据
     path = os.path.join(workspace, "data", "macro", "宏观数据_只读.xlsx")
@@ -89,8 +129,25 @@ def load_data(workspace):
     data["macro"] = {}
     if os.path.exists(path):
         wb = load_workbook(path, data_only=True)
+        # 模糊匹配关键Sheet名
+        def _find_sheet(sheets, keyword):
+            for name in sheets:
+                if keyword.lower() in name.lower():
+                    return name
+            return None
+        _sheet_key_map = {
+            "特控线": "特控线", "一分一段": "一分一段表",
+            "赋分区间": "赋分区间", "院校层次": "院校层次",
+        }
+        matched = set()
+        for key, display_name in _sheet_key_map.items():
+            found = _find_sheet(wb.sheetnames, key)
+            if found:
+                data["macro"][display_name] = read_sheet_dicts(wb[found])
+                matched.add(found)
         for name in wb.sheetnames:
-            data["macro"][name] = read_sheet_dicts(wb[name])
+            if name not in matched:
+                data["macro"][name] = read_sheet_dicts(wb[name])
 
     # 学校招生数据
     path = os.path.join(workspace, "data", "school", "学校招生_只读.xlsx")
@@ -380,7 +437,13 @@ def render_personal(data, env):
         try:
             detail_obj = json.loads(detail_str)
             latest_calc_detail = detail_obj.get("calculation_detail", "")
+            # 防御：list 转 string
+            if isinstance(latest_calc_detail, list):
+                latest_calc_detail = "|".join(str(x) for x in latest_calc_detail)
             latest_subject_scores = detail_obj.get("subject_scores", [])
+            # 防御：dict 转 list-of-dict
+            if isinstance(latest_subject_scores, dict):
+                latest_subject_scores = [{"subject": k, "score": v} for k, v in latest_subject_scores.items()]
         except (json.JSONDecodeError, TypeError):
             pass
 
@@ -450,7 +513,14 @@ def render_trend(data, env):
             "confidence": r.get("置信度", "-"),
             "method": r.get("主计算方法", "-"),
             "calc_detail": calc_detail,
+            "method_switch": False,  # will be set below
         })
+
+    # I15: 检测方法切换，标记相邻两次考试方法不同的记录
+    for i in range(1, len(exams)):
+        if exams[i].get("method") != exams[i-1].get("method"):
+            exams[i]["method_switch"] = True
+            exams[i]["prev_method"] = exams[i-1].get("method", "")
 
     eq_scores = [float(r["等效分（融合结果）"]) for r in eq_records if r.get("等效分（融合结果）")]
     weighted = filter_weighted(eq_records)
@@ -482,7 +552,7 @@ def render_trend(data, env):
     template = env.get_template("report_trend.html")
     return template.render(
         generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
-        exams=list(reversed(exams)),
+        exams=exams,  # 已按日期升序排序
         has_analysis=has_analysis,
         trend_class=trend_class,
         trend_arrow=trend_arrow,
@@ -605,7 +675,7 @@ def render_subject(data, env, subject_name, sheet_name):
         trend_class=trend_class,
         trend_arrow=trend_arrow,
         trend_text=trend_text,
-        records=list(reversed(records)),
+        records=records,  # 已按日期升序排序
         disclaimer=DISCLAIMER,
     )
 
@@ -656,21 +726,17 @@ def run(workspace):
 
     # Try to get actual subject names from exam data
     exams = data["exams"]
-    if exams:
-        latest_exam = None
-        for e in reversed(exams):
-            latest_exam = e
-            break
-        if latest_exam:
-            sub1_name = latest_exam.get("选科1名称")
-            sub2_name = latest_exam.get("选科2名称")
-            sub3_name = latest_exam.get("选科3名称")
-            if sub1_name:
-                subject_sheet_map["选科1追踪"] = str(sub1_name)
-            if sub2_name:
-                subject_sheet_map["选科2追踪"] = str(sub2_name)
-            if sub3_name:
-                subject_sheet_map["选科3追踪"] = str(sub3_name)
+    latest_exam = exams[-1] if exams else None
+    if latest_exam:
+        sub1_name = latest_exam.get("选科1名称")
+        sub2_name = latest_exam.get("选科2名称")
+        sub3_name = latest_exam.get("选科3名称")
+        if sub1_name:
+            subject_sheet_map["选科1追踪"] = str(sub1_name)
+        if sub2_name:
+            subject_sheet_map["选科2追踪"] = str(sub2_name)
+        if sub3_name:
+            subject_sheet_map["选科3追踪"] = str(sub3_name)
 
     for sheet_name, subject_name in subject_sheet_map.items():
         html = render_subject(data, env, subject_name, sheet_name)

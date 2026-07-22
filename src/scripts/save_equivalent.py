@@ -48,19 +48,36 @@ def run(workspace, exam_name, exam_date, calc_result, target_university=None, ta
 
     import json as _json
 
+    # I5: 去掉置信度中的"级"后缀，存储纯 A/B/C/D
+    confidence = str(calc_result.get("confidence", "")).replace("级", "")
+
+    # I6: 统一 calculation_detail 为字符串
+    calc_detail = calc_result.get("calculation_detail", "")
+    if isinstance(calc_detail, list):
+        calc_detail = "|".join(str(x) for x in calc_detail)
+    elif not isinstance(calc_detail, str):
+        calc_detail = str(calc_detail)
+
+    # I7: 统一 subject_scores 为 list-of-dict
+    subject_scores = calc_result.get("subject_scores", [])
+    if isinstance(subject_scores, dict):
+        subject_scores = [{"subject": k, "score": v} for k, v in subject_scores.items()]
+    elif not isinstance(subject_scores, list):
+        subject_scores = []
+
     extra_info = _json.dumps({
-        "subject_scores": calc_result.get("subject_scores", []),
+        "subject_scores": subject_scores,
         "warnings": calc_result.get("warnings", []),
         "trust_note": calc_result.get("trust_note"),
         "divergence": calc_result.get("divergence"),
-        "calculation_detail": calc_result.get("calculation_detail", ""),
+        "calculation_detail": calc_detail,
     }, ensure_ascii=False)
 
     ws.append([
         exam_name,
         exam_date,
         calc_result.get("equivalent_score", ""),
-        calc_result.get("confidence", ""),
+        confidence,
         calc_result.get("primary_method", ""),
         cv_method1, cv_score1,
         cv_method2, cv_score2,

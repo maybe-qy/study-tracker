@@ -32,7 +32,7 @@ OPTIONAL = [
     "sub3_name", "sub3_raw", "sub3_assigned", "sub3_confidence",
     "city_rank", "city_total", "alliance_rank", "alliance_total",
     "school_rank", "school_total", "special_line", "excellent_line",
-    "score_scale", "notes",
+    "score_scale", "school_type", "rank_type", "notes",
 ]
 
 EXCEL_COLS = [
@@ -44,7 +44,7 @@ EXCEL_COLS = [
     "总分",
     "市/联盟排名", "市/联盟总人数",
     "校排名", "校总人数",
-    "特控线", "优划线", "满分制", "备注",
+    "特控线", "优划线", "满分制", "学校类型", "排名类型", "备注",
 ]
 
 MD_TEMPLATE = """# {exam_name}

@@ -40,6 +40,11 @@
   .toggle-arrow { cursor: pointer; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; vertical-align: middle; flex-shrink: 0; }
   .toggle-arrow svg { display: none; }
   .toggle-arrow svg.show { display: block; }
+  .score-A { color: #166534; }
+  .score-B { color: #3b82f6; }
+  .score-C { color: #f59e0b; }
+  .score-D { color: #94a3b8; }
+  .method-switch-badge { font-size: 11px; cursor: help; color: #f59e0b; }
   .detail-row { display: none; }
 </style>
 </head>
@@ -64,9 +69,9 @@
       <tr>
         <td>{{ exam.date }}</td>
         <td>{{ exam.name }}</td>
-        <td><strong>{{ exam.score }}</strong></td>
+        <td><strong class="score-{{ exam.confidence }}">{{ exam.score }}</strong></td>
         <td><span class="confidence confidence-{{ exam.confidence }}">{{ exam.confidence }}级</span></td>
-        <td>{{ exam.method }}</td>
+        <td>{{ exam.method }}{% if exam.method_switch %} <span class="method-switch-badge" title="方法切换：从{{ exam.prev_method }}">⚠</span>{% endif %}</td>
         <td>
           {% if exam.calc_detail %}
           <span class="toggle-arrow" data-target="detail-{{ loop.index }}"><svg class="arrow-right show" width="12" height="12" viewBox="0 0 12 12"><path d="M4.5 2.5 L8 6 L4.5 9.5" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round"/></svg><svg class="arrow-down" width="12" height="12" viewBox="0 0 12 12"><path d="M2.5 4.5 L6 8 L9.5 4.5" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round"/></svg></span>
