@@ -95,8 +95,8 @@ def load_data(workspace):
     """Load all Excel data."""
     data = {"exams": [], "equivalent": [], "subjects": {}, "volatility": []}
 
-    def sort_by_date(records, reverse=True):
-        """按日期排序，默认降序（最新的在前）"""
+    def sort_by_date(records, reverse=False):
+        """按日期排序，默认升序（最旧的在前，便于趋势分析）"""
         def parse_date(d):
             if not d or not isinstance(d, str):
                 return ""
@@ -330,6 +330,8 @@ def render_personal(data, env):
             sigma="-",
             subject_scores=[],
             hierarchy_refs=None,
+            tier_info=None,
+            volatility_style="-",
             disclaimer=DISCLAIMER,
         )
 
@@ -491,6 +493,7 @@ def render_trend(data, env):
             volatility_upper="-",
             labels={"positive": "-", "normal": "-", "negative": "-"},
             cross_validations=[],
+            volatility_style="-",
             disclaimer=DISCLAIMER,
         )
 
@@ -503,7 +506,7 @@ def render_trend(data, env):
             try:
                 detail_obj = json.loads(detail_str)
                 calc_detail = detail_obj.get("calculation_detail", "")
-            except (_json.JSONDecodeError, TypeError):
+            except (json.JSONDecodeError, TypeError):
                 pass
 
         exams.append({
@@ -521,6 +524,9 @@ def render_trend(data, env):
         if exams[i].get("method") != exams[i-1].get("method"):
             exams[i]["method_switch"] = True
             exams[i]["prev_method"] = exams[i-1].get("method", "")
+
+    # 显示时反转为降序（最新的在最上面，方便查看近期趋势）
+    exams = list(reversed(exams))
 
     eq_scores = [float(r["等效分（融合结果）"]) for r in eq_records if r.get("等效分（融合结果）")]
     weighted = filter_weighted(eq_records)
@@ -675,7 +681,7 @@ def render_subject(data, env, subject_name, sheet_name):
         trend_class=trend_class,
         trend_arrow=trend_arrow,
         trend_text=trend_text,
-        records=records,  # 已按日期升序排序
+        records=list(reversed(records)),  # 降序显示（最新在前）
         disclaimer=DISCLAIMER,
     )
 

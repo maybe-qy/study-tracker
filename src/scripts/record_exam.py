@@ -126,6 +126,8 @@ def build_row(data):
         data.get("special_line"),
         data.get("excellent_line"),
         data.get("score_scale") or 750,
+        data.get("school_type"),
+        data.get("rank_type"),
         data.get("notes"),
     ]
 

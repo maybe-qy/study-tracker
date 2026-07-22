@@ -96,7 +96,7 @@ _SHEET_KEY_MAP = {
     "特控线": "特控线",
     "一分一段": "一分一段表",
     "赋分区间": "赋分区间",
-    "对照": "对照",
+    "对照": "本校对照表_总分",
     "门槛": "门槛",
     "升级": "升级",
     "院校层次": "院校层次",
@@ -681,17 +681,28 @@ def method_school_threshold(data, macro):
 
     wb = load_workbook(path, data_only=True)
 
-    # Only match if exam context aligns
-    if "期末" not in data.get("exam_name", ""):
-        wb.close()
-        return None
-
-    # Find upgrade sheet
+    # Match exam context (multi-level, same as method_two_module)
+    exam_name = data.get("exam_name", "")
     ws = None
-    for sn in wb.sheetnames:
-        if "期末" in str(sn) and "升级" in str(sn):
-            ws = wb[sn]
-            break
+    if "期末" in exam_name:
+        for sn in wb.sheetnames:
+            if "期末" in str(sn) and "升级" in str(sn):
+                ws = wb[sn]
+                break
+    if ws is None:
+        for kw in ["期中", "月考", "联考", "模拟", "统考"]:
+            if kw in exam_name:
+                for sn in wb.sheetnames:
+                    if kw in str(sn) or "升级" in str(sn):
+                        ws = wb[sn]
+                        break
+                if ws:
+                    break
+    if ws is None:
+        for sn in wb.sheetnames:
+            if "升级" in str(sn):
+                ws = wb[sn]
+                break
     if ws is None:
         wb.close()
         return None
@@ -760,7 +771,7 @@ def method_school_threshold(data, macro):
     coeff_map = {"省重点": 0.3, "市重点": 0.6, "区重点": 1.0, "普通": 1.5}
     coeff = coeff_map.get(school_type, 1.0)
 
-    score_table = macro.get("一分一段表", [])
+    score_table = _filter_numeric_rows(macro.get("一分一段表", []), "累计人数")
     if not score_table:
         return None
     max_count = max(int(r.get("累计人数", 0)) for r in score_table)
@@ -809,7 +820,9 @@ def method_school_subject_lookup(data, macro):
         subj_rank = subj.get("school_rank")
         if not subj_rank or name not in subject_rank_data:
             continue
-        rank_map = subject_rank_data[name]
+        rank_map = subject_rank_data[name].get("rank_scores", {})
+        if not rank_map:
+            continue
         subj_rank = int(subj_rank)
         # 线性插值查找
         ranks = sorted(rank_map.keys())
@@ -1254,7 +1267,7 @@ def run(data):
     user_total = data.get("city_total") or data.get("alliance_total")
     if user_total:
         user_total = int(user_total)
-        score_table = macro.get("一分一段表", [])
+        score_table = _filter_numeric_rows(macro.get("一分一段表", []), "累计人数")
         if score_table:
             max_count = max(int(r.get("累计人数", 0)) for r in score_table)
             if max_count > 0 and user_total > 0:
