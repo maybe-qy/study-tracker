@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-07-23 — v3.3.1 豆包适配修复
+
+### 严重修复
+- **QUICKSTART.md JSON格式错误（致命）**：教AI用subjects数组格式，但record_exam.py只认cn_score/math_score/sub1_name等扁平字段，导致各科分数全部丢失 → 修正为正确的扁平JSON格式
+- **报告文件无法交付**：AI只说"文件在output/目录下"，但用户无法访问AI云端文件系统 → 新增明确的文件交付指令（直接输出HTML内容或提供下载）
+- **报告清单不完整**：AI只提到1个文件，实际生成8份 → 新增完整报告清单和强制规则
+
+### 优化
+- record_exam.py 新增 `record_index` 返回字段（max_row - 1），让AI有明确依据判断录入次数
+
+### 更新文件
+| 文件 | 变更 |
+|------|------|
+| `src/QUICKSTART.md` | JSON格式修正 + 报告清单完善 + 文件交付指令 |
+| `src/scripts/record_exam.py` | 新增 record_index 返回字段 |
+
+
+
 ## 2026-07-23 — v3.3.0 豆包/通用AI适配 + 首次体验优化 + 预置数据
 
 ### 新增
