@@ -76,22 +76,34 @@ echo '{
   "total_score": 576,
   "school_rank": 150,
   "school_total": 600,
-  "subjects": [
-    {"name": "语文", "raw": 102},
-    {"name": "数学", "raw": 128},
-    {"name": "英语", "raw": 110},
-    {"name": "物理", "raw": 70, "assigned": 82},
-    {"name": "化学", "raw": 68, "assigned": 79},
-    {"name": "技术", "raw": 88, "assigned": 84}
-  ]
+  "cn_score": 102,
+  "math_score": 128,
+  "en_score": 110,
+  "sub1_name": "物理",
+  "sub1_raw": 70,
+  "sub1_assigned": 82,
+  "sub2_name": "化学",
+  "sub2_raw": 68,
+  "sub2_assigned": 79,
+  "sub3_name": "技术",
+  "sub3_raw": 88,
+  "sub3_assigned": 84
 }' | python3 src/scripts/record_exam.py
 ```
 
 字段说明：
+- `cn_score` = 语文原始分，`math_score` = 数学原始分，`en_score` = 英语原始分
+- `sub1_name`/`sub2_name`/`sub3_name` = 三门选科名称（如"物理"、"化学"、"技术"）
+- `sub1_raw`/`sub2_raw`/`sub3_raw` = 选科原始分（卷面分）
+- `sub1_assigned`/`sub2_assigned`/`sub3_assigned` = 选科赋分（浙江选考赋分后的分数）
 - `exam_type` 从考试名推断：含"期末"→期末，含"期中"→期中，含"月考"→月考，含"联考"/"模考"→模考
 - `school_total` 从"150/600"格式自动提取分母
-- `assigned` 是选科赋分（浙江选考赋分后的分数），语数英没有此字段
-- `raw` 是原始分（卷面分）
+- 语数英没有赋分，只有 `cn_score`/`math_score`/`en_score`，不要加 `_assigned` 字段
+
+脚本返回 JSON，其中 `record_index` 表示这是第几条记录（1=第一次录入，2=第二次录入...）。根据 `record_index` 向用户说明：
+- record_index=1："这是你的第一次成绩录入，基准分已建立。再录1次即可看到趋势。"
+- record_index=2："已录入第2次成绩，趋势报告现在可以显示上升/下降方向了。"
+- record_index>=4："已录入4次以上，波动分析和预测状态已解锁。"
 
 ### 第 4 步：计算等效分
 

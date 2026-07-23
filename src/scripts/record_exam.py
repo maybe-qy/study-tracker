@@ -258,6 +258,7 @@ def run(data):
     return {
         "status": "ok",
         "row": ws.max_row,
+        "record_index": ws.max_row - 1,  # 第几条记录（排除表头行）
         "md_path": md_path,
     }
 
