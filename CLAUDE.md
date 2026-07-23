@@ -83,7 +83,8 @@ A/B/C/D 四级。置信度由数据来源和方法决定，与年级无关。趋
 
 | 文档 | 内容 |
 |------|------|
-| [src/SKILL.md](src/SKILL.md) | 完整 Skill 定义与交互流程 |
+| [src/QUICKSTART.md](src/QUICKSTART.md) | AI 助手快速指南（豆包/ChatGPT/通用） |
+| [src/SKILL.md](src/SKILL.md) | 完整 Skill 定义与交互流程（Claude Code） |
 | [src/references/calculation_methods.md](src/references/calculation_methods.md) | 计算方法公式与边界 |
 | [src/references/data_schema.md](src/references/data_schema.md) | 全部 Excel/Markdown 字段定义 |
 | [src/references/interaction_scripts.md](src/references/interaction_scripts.md) | 边界案例与对话模板 |

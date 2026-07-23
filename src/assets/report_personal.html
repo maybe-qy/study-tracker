@@ -112,6 +112,17 @@
   </div>
   {% endif %}
 
+  {% if is_first_record %}
+  <div class="section" style="background:#f0fdf4;border-radius:8px;padding:16px;margin:8px 0;">
+    <div class="section-title" style="color:#166534;">✓ 基准分已建立</div>
+    <div style="font-size:14px;color:#475569;line-height:1.8;">
+      当前等效分 <strong>{{ equivalent_score }}</strong>（{{ confidence }}级置信度）<br>
+      再录入 1 次即可看到趋势方向<br>
+      再录入 3 次即可看到波动分析
+    </div>
+  </div>
+  {% endif %}
+
   {% if has_analysis %}
   <div class="section">
     <div class="section-title">成绩状态</div>

@@ -10,12 +10,12 @@
   .card { max-width: 640px; margin: 0 auto; background: #fff; border-radius: 12px; padding: 32px; box-shadow: 0 2px 12px rgba(0,0,0,.08); }
   h1 { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
   .date { font-size: 13px; color: #94a3b8; margin-bottom: 24px; }
-  .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; }
-  .stat-box { background: #f8fafc; border-radius: 8px; padding: 16px; text-align: center; }
+  .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; align-items: stretch; }
+  .stat-box { background: #f8fafc; border-radius: 8px; padding: 16px; text-align: center; display: flex; flex-direction: column; justify-content: center; min-height: 80px; }
   .stat-box .label { font-size: 12px; color: #94a3b8; margin-bottom: 4px; }
-  .stat-box .value { font-size: 24px; font-weight: 700; color: #1e293b; }
+  .stat-box .value { font-size: 28px; font-weight: 700; color: #1e293b; }
   .stat-box.highlight { background: #eff6ff; border: 1px solid #bfdbfe; }
-  .stat-box.highlight .value { font-size: 32px; color: #1e40af; }
+  .stat-box.highlight .value { font-size: 28px; color: #1e40af; }
   .trend { text-align: center; margin-bottom: 24px; font-size: 16px; }
   .trend-up { color: #16a34a; }
   .trend-down { color: #dc2626; }
@@ -39,6 +39,21 @@
   <h1>{{ subject }}追踪</h1>
   <div class="date">{{ generated_at }}</div>
 
+  {% if is_first_record %}
+  <div class="stats-grid" style="grid-template-columns: repeat(2, 1fr);">
+    <div class="stat-box highlight">
+      <div class="label">基准分</div>
+      <div class="value">{{ dynamic_score }}</div>
+    </div>
+    <div class="stat-box">
+      <div class="label">本次</div>
+      <div class="value">{{ latest }}</div>
+    </div>
+  </div>
+  <div style="text-align:center;margin-bottom:16px;font-size:13px;color:#16a34a;">
+    📊 首次记录已建立，再录入 1 次即可看到趋势
+  </div>
+  {% else %}
   <div class="stats-grid">
     <div class="stat-box highlight">
       <div class="label">动态分</div>
@@ -53,6 +68,7 @@
       <div class="value">{{ highest }}</div>
     </div>
   </div>
+  {% endif %}
 
   <div class="trend">
     趋势：<span class="trend-{{ trend_class }}">{{ trend_arrow }} {{ trend_text }}</span>

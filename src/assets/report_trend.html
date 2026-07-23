@@ -94,7 +94,17 @@
     </tbody>
   </table>
 
-  {% if trend_text != "数据不足" %}
+  {% if is_first_record %}
+  <div class="section" style="background:#f0fdf4;border-radius:8px;padding:16px;margin:8px 0;">
+    <div class="section-title" style="color:#166534;">📊 首次记录已建立</div>
+    <div style="font-size:14px;color:#475569;line-height:1.8;">
+      再录入 1 次考试，这里会显示趋势方向（上升/下降/持平）<br>
+      再录入 3 次考试，还会解锁波动分析和预测状态
+    </div>
+  </div>
+  {% endif %}
+
+  {% if trend_text != "数据不足" and not is_first_record %}
   <div class="section">
     <div class="section-title">趋势判断</div>
     <div class="stat-row">

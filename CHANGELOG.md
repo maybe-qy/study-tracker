@@ -1,5 +1,38 @@
 # Changelog
 
+## 2026-07-23 — v3.3.0 豆包/通用AI适配 + 首次体验优化 + 预置数据
+
+### 新增
+- **QUICKSTART.md**：面向豆包/ChatGPT等通用AI助手的简化引导指令，对话式录入，不输出技术命令
+- **预置浙江宏观数据**：仓库内置一分一段表、特控线、赋分区间，新用户clone后开箱可用
+- **推广文案模板**：docs/推广文案_微信笔记.md，诚实描述功能和使用门槛
+
+### 优化
+- **首次录入体验**：1次考试时显示"基准分已建立"引导，替代空洞的"数据不足"
+- **单科报告首次适配**：单次记录时显示"基准分/本次"两框 + 引导文案，隐藏无意义的"最高=本次"
+- **README新增AI助手入口**：推荐用户通过AI助手使用，降低使用门槛
+
+### 修复
+- **单科报告CSS布局Bug**：统计框字号不一致导致grid错位 → 统一28px + flex等高布局
+- **.gitignore修正**：data/ → data/personal/，放开宏观数据和学校数据供新用户使用
+
+### 更新文件
+| 文件 | 变更 |
+|------|------|
+| `src/QUICKSTART.md` | 新建 — AI助手快速指南 |
+| `data/macro/宏观数据_只读.xlsx` | 替换为干净模板（省级数据+空学校模板） |
+| `data/school/学校招生_只读.xlsx` | 空模板（仅表头） |
+| `.gitignore` | data/ → data/personal/ |
+| `src/assets/report_personal.html` | 新增首次体验区块 |
+| `src/assets/report_trend.html` | 新增首次体验引导 |
+| `src/assets/report_subject.html` | CSS修复 + 首次记录适配 |
+| `src/scripts/generate_reports.py` | 3个render函数增加is_first_record逻辑 |
+| `README.md` | 新增AI助手入口 |
+| `CLAUDE.md` | 文档表新增QUICKSTART.md |
+| `docs/推广文案_微信笔记.md` | 新建 — 推广文案模板 |
+
+
+
 ## 2026-07-22 — v3.2.2 第二次模型审查修复（5个P1问题）
 
 ### 严重修复

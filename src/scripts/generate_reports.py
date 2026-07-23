@@ -309,11 +309,13 @@ def render_personal(data, env):
     eq_records = data["equivalent"]
     macro = data.get("macro", {})
 
+    exam_records = data.get("exams", [])
     if not eq_records:
+        has_exams = len(exam_records) >= 1
         template = env.get_template("report_personal.html")
         return template.render(
             generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
-            equivalent_score="暂无数据",
+            equivalent_score="暂无数据" if not has_exams else "等待计算",
             latest_equiv=0,
             confidence="-",
             method="-",
@@ -321,6 +323,8 @@ def render_personal(data, env):
             error_lower="-",
             error_upper="-",
             has_analysis=False,
+            is_first_record=False,  # 个人档案的首次引导仅在已有1条等效分时触发
+            exam_count=len(exam_records),
             trend_class="flat",
             trend_arrow="→",
             trend_text="等待数据",
@@ -353,6 +357,7 @@ def render_personal(data, env):
     sigma, vol_low, vol_high = compute_volatility_weighted(weighted)
     pred = prediction_state(eq_scores)
     has_analysis = len(eq_scores) >= 4
+    is_first_record = len(eq_scores) == 1
     labels, label_sequence = eval_labels(eq_scores) if len(eq_scores) >= 4 else (None, None)
     volatility_style = classify_volatility_style(labels, sigma, label_sequence) if has_analysis else None
 
@@ -468,6 +473,8 @@ def render_personal(data, env):
         volatility_upper=vol_high or "-",
         sigma=f"{sigma}分" if sigma else "-",
         volatility_style=volatility_style or "-",
+        is_first_record=is_first_record,
+        exam_count=len(eq_scores),
         subject_scores=latest_subject_scores,
         hierarchy_refs=None,
         tier_info=tier_info,
@@ -478,12 +485,29 @@ def render_personal(data, env):
 def render_trend(data, env):
     """Render 高考总分趋势.html."""
     eq_records = data["equivalent"]
+    exam_records = data.get("exams", [])
 
     if not eq_records:
+        # 有考试记录但无等效分时，显示首次录入引导
+        is_first = len(exam_records) >= 1
+        exams_for_display = []
+        if is_first:
+            for e in exam_records:
+                exams_for_display.append({
+                    "date": e.get("日期", "-"),
+                    "name": e.get("考试名", "-"),
+                    "score": "-",
+                    "confidence": "-",
+                    "method": "等待计算",
+                    "method_switch": False,
+                    "calc_detail": "",
+                    "prev_method": "",
+                })
+            exams_for_display = list(reversed(exams_for_display))
         template = env.get_template("report_trend.html")
         return template.render(
             generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
-            exams=[],
+            exams=exams_for_display,
             has_analysis=False,
             trend_class="flat",
             trend_arrow="→",
@@ -494,6 +518,8 @@ def render_trend(data, env):
             labels={"positive": "-", "normal": "-", "negative": "-"},
             cross_validations=[],
             volatility_style="-",
+            is_first_record=is_first,
+            exam_count=len(exam_records),
             disclaimer=DISCLAIMER,
         )
 
@@ -533,6 +559,7 @@ def render_trend(data, env):
     trend_class, trend_arrow, trend_text = compute_trend(eq_scores)
     sigma, vol_low, vol_high = compute_volatility_weighted(weighted)
     has_analysis = len(eq_scores) >= 4
+    is_first_record = len(exams) == 1
     labels, label_sequence = eval_labels(eq_scores) if len(eq_scores) >= 4 else (None, None)
     volatility_style = classify_volatility_style(labels, sigma, label_sequence) if has_analysis else None
 
@@ -568,6 +595,8 @@ def render_trend(data, env):
         volatility_upper=vol_high or "-",
         labels={"positive": labels["积极"] if labels else "-", "normal": labels["正常"] if labels else "-", "negative": labels["消极"] if labels else "-"},
         volatility_style=volatility_style or "-",
+        is_first_record=is_first_record,
+        exam_count=len(exams),
         cross_validations=cross_validations,
         disclaimer=DISCLAIMER,
     )
@@ -671,6 +700,7 @@ def render_subject(data, env, subject_name, sheet_name):
         highest = max(valid_scores)
         trend_class, trend_arrow, trend_text = compute_trend(valid_scores)
 
+    is_first_record = len(valid_scores) == 1
     template = env.get_template("report_subject.html")
     return template.render(
         subject=subject_name,
@@ -681,6 +711,8 @@ def render_subject(data, env, subject_name, sheet_name):
         trend_class=trend_class,
         trend_arrow=trend_arrow,
         trend_text=trend_text,
+        is_first_record=is_first_record,
+        exam_count=len(valid_scores),
         records=list(reversed(records)),  # 降序显示（最新在前）
         disclaimer=DISCLAIMER,
     )
