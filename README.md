@@ -217,13 +217,6 @@ study-tracker/
 - [x] 单科排名对照法（A 级）
 - [ ] 豆包移动端一键部署（粘贴即用）
 
-```text
-帮我部署运行这个项目：
-https://github.com/maybe-qy/study-tracker
-请先阅读 src/QUICKSTART.md，然后帮我录入成绩
-```
-> 复制上面这段话，在豆包 App 任务模式（绿色沙漏图标）粘贴发送，AI 自动克隆仓库、安装依赖、引导录入成绩、交付 HTML 报告。免费可用，手机就行。
-
 ## FAQ
 
 **Q: 等效分是预测高考分吗？**
