@@ -125,7 +125,15 @@ echo '{
 
 ```bash
 cd <项目目录>
-python3 src/scripts/calc_equivalent.py --workspace . --exam-name "11月期中"
+echo '{
+  "workspace": ".",
+  "exam_name": "11月期中",
+  "exam_date": "2025-11",
+  "total_score": 576,
+  "school_rank": 150,
+  "school_total": 600,
+  "special_line": 542.5
+}' | python3 src/scripts/calc_equivalent.py
 ```
 
 **必须执行这一步，不要跳过**。即使计算失败也要向用户说明原因：
