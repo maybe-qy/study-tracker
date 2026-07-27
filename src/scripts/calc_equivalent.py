@@ -1186,7 +1186,7 @@ def run(data):
 
     methods = []
 
-    # Try methods in priority order: two_module → population_calibration → score_line → school_lookup → percentile → school_estimate
+    # Try methods in priority order: two_module → population_calibration → score_line → school_threshold → school_lookup → school_subject_lookup → percentile → school_estimate
     result = method_two_module(data, macro)
     if result:
         methods.append(result)

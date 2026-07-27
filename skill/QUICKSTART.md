@@ -148,7 +148,10 @@ echo '{
 
 ```bash
 cd <项目目录>
-python3 src/scripts/save_equivalent.py --workspace .
+python3 src/scripts/save_equivalent.py \
+  --workspace . \
+  --exam-name "11月期中" \
+  --exam-date "2025-11"
 ```
 
 ### 第 6 步：生成报告（输出HTML文件，不是应用）
@@ -232,9 +235,9 @@ python3 src/scripts/generate_reports.py --workspace .
 
 等效分是把校内考试分数换算到高考尺度的估算值：
 
-- **A级**：有校内对照表或全市排名，精度高（误差 ±3-5 分）
-- **B级**：有校内门槛人数校准，精度中（误差 ±5-10 分）
-- **C级**：仅校内排名估算，精度低（误差 ±15-30 分）
+- **A级**：有校内对照表或全市排名，精度高（误差 ±5 分）
+- **B级**：有校内门槛人数校准，精度中（误差 ±10 分）
+- **C级**：仅校内排名估算，精度低（误差 ±15 分）
 - **D级**：数据不足，仅供参考
 
 计算方法按优先级自动选择，多种方法可用时加权融合。详见 `skill/references/calculation_methods.md`。
