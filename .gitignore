@@ -38,6 +38,10 @@ logs/
 # 个人数据不提交（成绩、等效分记录等）
 data/personal/
 
+# 个人文件（成绩会议PPT、个人宏观数据等）
+*.pptx
+data/macro/宏观数据.xlsx
+
 # 生成的报告（运行时输出）
 output/
 
