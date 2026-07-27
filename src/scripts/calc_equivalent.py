@@ -84,7 +84,16 @@ def read_sheet_rows(ws, skip_title_row=True):
 
 
 def find_sheet(sheets, keyword):
-    """Find first sheet name containing keyword (case-insensitive fuzzy match)."""
+    """Find first sheet name containing keyword (case-insensitive fuzzy match).
+    Uses display_name for matching when it differs from keyword to avoid false matches
+    (e.g. '对照' matching '单科对照' instead of '本校对照表_总分')."""
+    display = _SHEET_KEY_MAP.get(keyword, keyword)
+    # Prefer display_name match (more specific)
+    if display.lower() != keyword.lower():
+        for name in sheets:
+            if display.lower() in name.lower():
+                return name
+    # Fallback to keyword match
     for name in sheets:
         if keyword.lower() in name.lower():
             return name
@@ -191,6 +200,10 @@ def method_school_lookup(data, macro):
 
     lookup_sheet = macro.get("本校对照表_总分", [])
     if not lookup_sheet:
+        return None
+
+    # Validate required columns exist
+    if not lookup_sheet or "校内排名" not in lookup_sheet[0]:
         return None
 
     # Sort by 校内排名
