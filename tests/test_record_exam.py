@@ -7,7 +7,7 @@ import tempfile
 
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src", "scripts"))
 from record_exam import validate, build_row, MD_TEMPLATE
 from setup_workspace import run as setup_workspace
 

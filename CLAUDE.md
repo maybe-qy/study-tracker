@@ -13,8 +13,9 @@
 ```
 src/scripts/     # Python 脚本（calc_equivalent, record_exam, generate_reports, save_equivalent, setup_workspace）
 src/assets/      # Jinja2 HTML 模板（report_personal, report_trend, report_subject）
-src/references/  # 参考文档（计算方法、数据 Schema、交互脚本）
-src/tests/       # pytest 测试（35 通过）
+skill/           # Skill 定义与参考文档（SKILL.md, QUICKSTART.md, references/）
+tests/           # pytest 测试（39 通过）
+docs/            # 项目介绍与竞品分析、报告截图
 data/macro/      # 宏观数据（一分一段表、特控线、对照表等）
 data/school/     # 学校招生录取数据
 data/personal/   # 个人数据（Git 忽略）
@@ -25,10 +26,10 @@ output/          # 生成的 HTML 报告（Git 忽略）
 
 ```bash
 # 运行所有测试
-python -m pytest src/tests/ -v
+python -m pytest tests/ -v
 
 # 运行集成测试
-python -m pytest src/tests/test_integration_real_data.py -v -s
+python -m pytest tests/test_integration_real_data.py -v -s
 
 # 手动生成报告
 python src/scripts/generate_reports.py --workspace .
@@ -83,10 +84,10 @@ A/B/C/D 四级。置信度由数据来源和方法决定，与年级无关。趋
 
 | 文档 | 内容 |
 |------|------|
-| [src/QUICKSTART.md](src/QUICKSTART.md) | AI 助手快速指南（豆包/ChatGPT/通用） |
-| [src/SKILL.md](src/SKILL.md) | 完整 Skill 定义与交互流程（Claude Code） |
-| [src/references/calculation_methods.md](src/references/calculation_methods.md) | 计算方法公式与边界 |
-| [src/references/data_schema.md](src/references/data_schema.md) | 全部 Excel/Markdown 字段定义 |
-| [src/references/interaction_scripts.md](src/references/interaction_scripts.md) | 边界案例与对话模板 |
-| [src/references/interaction_examples.md](src/references/interaction_examples.md) | 完整交互示例 |
+| [skill/QUICKSTART.md](skill/QUICKSTART.md) | AI 助手快速指南（豆包/ChatGPT/通用） |
+| [skill/SKILL.md](skill/SKILL.md) | 完整 Skill 定义与交互流程（Claude Code） |
+| [skill/references/calculation_methods.md](skill/references/calculation_methods.md) | 计算方法公式与边界 |
+| [skill/references/data_schema.md](skill/references/data_schema.md) | 全部 Excel/Markdown 字段定义 |
+| [skill/references/interaction_scripts.md](skill/references/interaction_scripts.md) | 边界案例与对话模板 |
+| [skill/references/interaction_examples.md](skill/references/interaction_examples.md) | 完整交互示例 |
 | [CHANGELOG.md](CHANGELOG.md) | 版本变更记录 |

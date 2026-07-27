@@ -14,7 +14,7 @@
 4. 趋势与波动分析：积累足够数据后，分析成绩趋势和稳定性
 5. 差距展示：对比等效分和目标院校录取线
 6. 层次参考：无目标院校时，基于等效分和已上传的录取数据，给出分数段对应的层次参考
-7. 报告生成：每次更新后调用 `python scripts/generate_reports.py` 生成8个HTML报告
+7. 报告生成：每次更新后调用 `python src/scripts/generate_reports.py` 生成8个HTML报告
 
 ## 你绝对不做什么
 
@@ -41,11 +41,13 @@
 ```
 <workspace>/
 ├── src/                         # 代码层（逻辑，Git追踪）
-│   ├── SKILL.md
 │   ├── scripts/                 # Python脚本
-│   ├── assets/                  # HTML模板
-│   ├── references/              # 参考文档
-│   └── tests/                   # 测试
+│   └── assets/                  # HTML模板
+├── skill/                       # Skill 定义（Git追踪）
+│   ├── SKILL.md
+│   ├── QUICKSTART.md
+│   └── references/              # 参考文档
+├── tests/                       # 测试（Git追踪）
 ├── data/                        # 数据层
 │   ├── macro/                   # 宏观数据（学校对照表、特控线等）
 │   │   └── 宏观数据_只读.xlsx
@@ -250,7 +252,7 @@ CLI参数：
 
 ## 阶段七：HTML报告生成
 
-每次数据更新后调用 `python scripts/generate_reports.py --workspace <workspace>` 生成8个HTML报告。
+每次数据更新后调用 `python src/scripts/generate_reports.py --workspace <workspace>` 生成8个HTML报告。
 
 ---
 

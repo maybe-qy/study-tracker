@@ -48,7 +48,7 @@
 把下面的内容发给你的 AI 助手（豆包、ChatGPT、Claude 等）：
 
 > 帮我部署运行这个项目：https://github.com/maybe-qy/study-tracker
-> 请先阅读 src/QUICKSTART.md，然后帮我录入成绩。
+> 请先阅读 skill/QUICKSTART.md，然后帮我录入成绩。
 
 AI 会自动完成部署、录入、计算、生成报告，全程对话操作，无需命令行。
 
@@ -166,17 +166,17 @@ study-tracker/
 │   │   ├── calc_equivalent.py      # 等效分计算（8种方法）
 │   │   ├── save_equivalent.py      # 等效分保存
 │   │   └── generate_reports.py     # HTML报告生成
-│   ├── assets/
-│   │   ├── report_personal.html    # 个人档案模板
-│   │   ├── report_trend.html       # 趋势报告模板
-│   │   └── report_subject.html     # 单科追踪模板
-│   ├── references/
-│   │   ├── calculation_methods.md  # 计算方法公式
-│   │   ├── data_schema.md          # 数据字段定义
-│   │   ├── interaction_examples.md # 交互示例
-│   │   └── interaction_scripts.md  # 边界案例
-│   └── tests/                      # pytest 测试
-├── data/                           # 数据目录（Git忽略）
+│   └── assets/
+│       ├── report_personal.html    # 个人档案模板
+│       ├── report_trend.html       # 趋势报告模板
+│       └── report_subject.html     # 单科追踪模板
+├── skill/
+│   ├── SKILL.md                    # 完整 Skill 定义
+│   ├── QUICKSTART.md               # AI 助手快速指南
+│   └── references/                 # 参考文档
+├── tests/                          # pytest 测试
+├── docs/                           # 项目介绍与竞品分析
+├── data/                           # 数据目录
 ├── output/                         # 报告输出（Git忽略）
 ├── requirements.txt
 ├── CHANGELOG.md
@@ -235,11 +235,11 @@ study-tracker/
 
 | 文档 | 内容 |
 |------|------|
-| [SKILL.md](src/SKILL.md) | 完整 Skill 定义与交互流程 |
-| [计算方法详解](src/references/calculation_methods.md) | 8 种方法公式与边界条件 |
-| [数据字段定义](src/references/data_schema.md) | 全部 Excel/Markdown 字段说明 |
-| [交互示例](src/references/interaction_examples.md) | 端到端对话示例 |
-| [边界案例](src/references/interaction_scripts.md) | 8 种场景处理策略 |
+| [SKILL.md](skill/SKILL.md) | 完整 Skill 定义与交互流程 |
+| [计算方法详解](skill/references/calculation_methods.md) | 8 种方法公式与边界条件 |
+| [数据字段定义](skill/references/data_schema.md) | 全部 Excel/Markdown 字段说明 |
+| [交互示例](skill/references/interaction_examples.md) | 端到端对话示例 |
+| [边界案例](skill/references/interaction_scripts.md) | 8 种场景处理策略 |
 | [变更记录](CHANGELOG.md) | 版本更新历史 |
 
 ## 开源协议

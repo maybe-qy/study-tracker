@@ -12,14 +12,14 @@ import shutil
 
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src", "scripts"))
 from setup_workspace import run as setup_workspace
 from record_exam import run as record_exam
 from calc_equivalent import run as calc_equivalent
 from generate_reports import run as generate_reports
 
 
-REAL_DATA = os.path.join(os.path.dirname(__file__), "..", "..", "测试数据")
+REAL_DATA = os.path.join(os.path.dirname(__file__), "..", "测试数据")
 
 
 def copy_real_macro_data(workspace):

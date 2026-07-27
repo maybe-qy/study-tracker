@@ -10,7 +10,7 @@
 ```text
 帮我部署运行这个项目：
 https://github.com/maybe-qy/study-tracker
-请先阅读 src/QUICKSTART.md，然后帮我录入成绩
+请先阅读 skill/QUICKSTART.md，然后帮我录入成绩
 ```
 
 ——
@@ -229,7 +229,7 @@ python3 src/scripts/generate_reports.py --workspace .
 - **C级**：仅校内排名估算，精度低（误差 ±15-30 分）
 - **D级**：数据不足，仅供参考
 
-计算方法按优先级自动选择，多种方法可用时加权融合。详见 `src/references/calculation_methods.md`。
+计算方法按优先级自动选择，多种方法可用时加权融合。详见 `skill/references/calculation_methods.md`。
 
 ## 宏观数据说明
 

@@ -7,7 +7,7 @@ import tempfile
 
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src", "scripts"))
 from generate_reports import load_data, compute_trend, compute_volatility, prediction_state, eval_labels
 
 
@@ -91,7 +91,7 @@ def test_generate_reports_empty_workspace(tmpdir):
 
 def test_generate_reports_with_data(tmpdir):
     """Test full pipeline: setup -> record -> calc -> generate."""
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src", "scripts"))
     from setup_workspace import main as setup_main
     from record_exam import run as record_exam
     from generate_reports import run as gen_reports

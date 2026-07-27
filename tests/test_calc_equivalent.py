@@ -8,7 +8,7 @@ import tempfile
 import pytest
 
 # Add scripts dir to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src", "scripts"))
 from calc_equivalent import run
 
 

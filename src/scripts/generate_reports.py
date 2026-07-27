@@ -11,6 +11,7 @@ Usage:
 """
 
 import argparse
+import base64
 import json
 import os
 import sys
@@ -302,6 +303,21 @@ def classify_volatility_style(labels, sigma, sequence):
     return "分数波动较大"
 
 
+def _find_logo_base64(target_university, logo_dir="src/assets/logos"):
+    """Find university logo SVG and return as base64 data URI, or None if not found."""
+    if not target_university or not os.path.isdir(logo_dir):
+        return None
+    for fname in os.listdir(logo_dir):
+        if target_university in fname and fname.endswith(".svg"):
+            fpath = os.path.join(logo_dir, fname)
+            try:
+                with open(fpath, "rb") as fh:
+                    return "data:image/svg+xml;base64," + base64.b64encode(fh.read()).decode()
+            except Exception:
+                return None
+    return None
+
+
 # ─── Report generators ─────────────────────────────────────────────────
 
 def render_personal(data, env):
@@ -366,10 +382,13 @@ def render_personal(data, env):
     target_university = latest.get("目标院校")
     target_line = latest.get("目标院校录取线")
     target_gap = latest.get("差距分数")
+    # Auto-compute gap if not stored but we have both values
+    score = latest_equiv if latest_equiv else (eq_scores[-1] if eq_scores else 0)
+    if target_gap is None and target_line is not None and score > 0:
+        target_gap = round(score - target_line, 1)
 
     tier_info = None
-    score = latest_equiv if latest_equiv else (eq_scores[-1] if eq_scores else 0)
-    tier_data = macro.get("院校层次参考", [])
+    tier_data = macro.get("院校层次", [])
     if tier_data and score > 0:
         current_tier = None
         next_tier = None
@@ -422,6 +441,7 @@ def render_personal(data, env):
             "target_university": target_university,
             "target_line": target_line,
             "target_gap": target_gap,
+            "target_logo": _find_logo_base64(target_university),
         }
 
     # 无院校层次参考但有目标院校时，构建最小 tier_info
@@ -434,6 +454,7 @@ def render_personal(data, env):
             "target_university": target_university,
             "target_line": target_line,
             "target_gap": target_gap,
+            "target_logo": _find_logo_base64(target_university),
         }
 
     # Extract calculation detail from latest record
