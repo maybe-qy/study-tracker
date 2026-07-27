@@ -15,7 +15,7 @@
 <!-- 是否运行了测试？结果如何？ -->
 
 ```bash
-python -m pytest tests/ -v
+python3 -m pytest tests/ -v
 ```
 
 ## 关联 Issue

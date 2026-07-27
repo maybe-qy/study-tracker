@@ -14,7 +14,7 @@
 4. 趋势与波动分析：积累足够数据后，分析成绩趋势和稳定性
 5. 差距展示：对比等效分和目标院校录取线
 6. 层次参考：无目标院校时，基于等效分和已上传的录取数据，给出分数段对应的层次参考
-7. 报告生成：每次更新后调用 `python src/scripts/generate_reports.py` 生成8个HTML报告
+7. 报告生成：每次更新后调用 `python3 src/scripts/generate_reports.py` 生成8个HTML报告
 
 ## 你绝对不做什么
 
@@ -130,7 +130,7 @@
 ## 阶段二：个体成绩录入（每次考试后）
 
 ### 2.1 考试基本信息
-- 考试名、日期、类型（全市统考/联盟考试/校级考试/其他）
+- 考试名、日期、类型（期中/期末/月考/模考/联考/统考）
 
 ### 2.2 科目成绩
 
@@ -146,7 +146,7 @@
 
 ### 2.4 排名信息
 
-校排名（）和校总人数（）为必填字段。如有全市/联盟排名也一并录入。
+校排名和校总人数为选填字段（有则录入，影响等效分精度）。如有全市/联盟排名也一并录入。
 
 **school_type**（可选）：学校类型，用于校排名估算方法。可选值：省重点 / 市重点 / 区重点 / 普通。不填默认为"普通"。
 
@@ -206,9 +206,14 @@
 
 ### 保存等效分结果
 
-调用 `save_equivalent.py` 保存等效分计算到 Excel：
+调用 `save_equivalent.py` 保存等效分计算到 Excel。**必须通过管道连接 `calc_equivalent.py` 的输出**：
 
-
+```bash
+echo '{...计算输入JSON...}' | python3 src/scripts/calc_equivalent.py | python3 src/scripts/save_equivalent.py \
+  --workspace . \
+  --exam-name "11月期中" \
+  --exam-date "2025-11"
+```
 
 CLI参数：
 | 参数 | 必填 | 说明 |
@@ -219,7 +224,7 @@ CLI参数：
 | `--target` | 否 | 目标院校名称 |
 | `--target-line` | 否 | 目标院校录取线 |
 
-等效分计算结果通过 stdin 传入（来自  的 JSON 输出）。
+等效分计算结果通过 stdin 传入（来自 `calc_equivalent.py` 的 JSON 输出）。
 
 ---
 
@@ -229,7 +234,7 @@ CLI参数：
 
 - 浮动区间：`[均值 - 1.5σ, 均值 + 1.5σ]`
 - 趋势提取：EWMA
-- 预测标签：内部使用，不输出给用户
+- 预测标签：积极/正常/消极（≥4次数据后在报告中展示）
 - 置信度权重：A=1.0, B=0.8, C=0.5, D=0
 
 ---
@@ -252,7 +257,7 @@ CLI参数：
 
 ## 阶段七：HTML报告生成
 
-每次数据更新后调用 `python src/scripts/generate_reports.py --workspace <workspace>` 生成8个HTML报告。
+每次数据更新后调用 `python3 src/scripts/generate_reports.py --workspace <workspace>` 生成8个HTML报告。
 
 ---
 

@@ -122,7 +122,7 @@ def test_generate_reports_with_data(tmpdir):
         "workspace": ws,
         "exam_name": "期末",
         "exam_date": "2026-01",
-        "exam_type": "全市统考",
+        "exam_type": "统考",
         "grade": "高一",
         "total_score": 650,
         "cn_score": 118, "math_score": 135, "en_score": 128,

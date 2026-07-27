@@ -7,8 +7,9 @@ Priority order (fixed ranking, first available wins as primary):
   3. 分数线对照法/等比例放缩法 (Score-line comparison) — A级
   4. 校排阈值估算法 (School threshold estimation) — B级
   5. 校内排名对照法 (School ranking lookup) — A级
-  6. 排名锚定法 (Percentile anchoring) — A级，交叉验证
-  7. 校排名估算 (School rank estimation) — C级
+  6. 单科排名对照法 (School subject lookup) — A级
+  7. 排名锚定法 (Percentile anchoring) — A级，交叉验证
+  8. 校排名估算 (School rank estimation) — C级
 
 Confidence is A/B/C/D four levels, determined by data source and method.
 All available methods participate in weighted fusion by confidence.
@@ -24,121 +25,7 @@ import sys
 
 from openpyxl import load_workbook
 
-
-# 已知列名关键词集合，用于检测第1行是标题还是表头
-_KNOWN_COLUMN_KEYWORDS = {"分数", "排名", "累计人数", "年份", "人数", "特控线", "上线", "下限", "上限", "科目", "得分", "等效分", "原始分", "赋分", "总分", "成绩", "名称", "score", "rank", "count", "year", "name"}
-
-
-def _is_header_row(row_values):
-    """检测第一行是否为表头行（而非标题行）。"""
-    if not row_values:
-        return False
-    first = str(row_values[0]).strip() if row_values[0] else ""
-    if not first:
-        return False
-    # 如果第一列值在已知列名集合中，认为是表头
-    if first in _KNOWN_COLUMN_KEYWORDS:
-        return True
-    for kw in _KNOWN_COLUMN_KEYWORDS:
-        if kw in first:
-            return True
-    # 如果第一行超过2个值都在已知列名集合中，也认为是表头
-    hits = 0
-    for v in row_values:
-        if v is None:
-            continue
-        sv = str(v).strip()
-        if sv in _KNOWN_COLUMN_KEYWORDS:
-            hits += 1
-        else:
-            for kw in _KNOWN_COLUMN_KEYWORDS:
-                if kw in sv:
-                    hits += 1
-                    break
-    if hits >= 2:
-        return True
-    return False
-
-
-def read_sheet_rows(ws, skip_title_row=True):
-    """Read all rows from a worksheet as list of dicts.
-
-    Args:
-        ws: openpyxl worksheet
-        skip_title_row: if True, auto-detect and skip title rows before the header row
-    """
-    if ws.max_row < 2:
-        return []
-    header_row_idx = 1
-    if skip_title_row and ws.max_row >= 3:
-        row1_vals = tuple(cell.value for cell in ws[1])
-        if not _is_header_row(row1_vals):
-            row2_vals = tuple(cell.value for cell in ws[2]) if ws.max_row >= 3 else None
-            if row2_vals and _is_header_row(row2_vals):
-                header_row_idx = 2
-    headers = [str(cell.value) if cell.value is not None else f"col_{i}" for i, cell in enumerate(ws[header_row_idx])]
-    rows = []
-    for row in ws.iter_rows(min_row=header_row_idx + 1, values_only=True):
-        rows.append(dict(zip(headers, row)))
-    return rows
-
-
-def find_sheet(sheets, keyword):
-    """Find first sheet name containing keyword (case-insensitive fuzzy match).
-    Uses display_name for matching when it differs from keyword to avoid false matches
-    (e.g. '对照' matching '单科对照' instead of '本校对照表_总分')."""
-    display = _SHEET_KEY_MAP.get(keyword, keyword)
-    # Prefer display_name match (more specific)
-    if display.lower() != keyword.lower():
-        for name in sheets:
-            if display.lower() in name.lower():
-                return name
-    # Fallback to keyword match
-    for name in sheets:
-        if keyword.lower() in name.lower():
-            return name
-    return None
-
-
-# 宏观数据Sheet名关键词映射
-_SHEET_KEY_MAP = {
-    "特控线": "特控线",
-    "一分一段": "一分一段表",
-    "赋分区间": "赋分区间",
-    "对照": "本校对照表_总分",
-    "门槛": "门槛",
-    "升级": "升级",
-    "院校层次": "院校层次",
-}
-
-
-def read_macro_data(workspace):
-    """Read all macro data sheets with fuzzy sheet name matching."""
-    path = os.path.join(workspace, "data", "macro", "宏观数据_只读.xlsx")
-    if not os.path.exists(path):
-        path = os.path.join(workspace, "data", "macro", "宏观数据.xlsx")
-    if not os.path.exists(path):
-        return None
-    wb = load_workbook(path, data_only=True)
-    data = {}
-    # 先用模糊匹配定位关键Sheet
-    matched = set()
-    for key, display_name in _SHEET_KEY_MAP.items():
-        found = find_sheet(wb.sheetnames, key)
-        if found:
-            data[display_name] = read_sheet_rows(wb[found])
-            matched.add(found)
-    # 其余Sheet保留原名
-    for name in wb.sheetnames:
-        if name not in matched:
-            data[name] = read_sheet_rows(wb[name])
-    wb.close()
-    return data
-
-
-def _filter_numeric_rows(rows, key_field):
-    """Filter rows to only those where key_field is numeric."""
-    return [r for r in rows if isinstance(r.get(key_field), (int, float))]
+from excel_utils import read_sheet_dicts, find_sheet, read_macro_data, filter_numeric_rows
 
 
 def method_score_line(data, macro):
@@ -147,7 +34,7 @@ def method_score_line(data, macro):
     if not special_line_exam:
         return None
 
-    special_lines = _filter_numeric_rows(macro.get("特控线", []), "特控线分数")
+    special_lines = filter_numeric_rows(macro.get("特控线", []), "特控线分数")
     if not special_lines:
         return None
 
@@ -260,7 +147,7 @@ def method_percentile(data, macro):
         return None
 
     percentile = 1.0 - (rank / total)
-    score_table = _filter_numeric_rows(macro.get("一分一段表", []), "累计人数")
+    score_table = filter_numeric_rows(macro.get("一分一段表", []), "累计人数")
     if not score_table:
         return None
 
@@ -310,7 +197,7 @@ def method_school_estimate(data, macro):
     if macro.get("本校对照表_总分"):
         return None
 
-    score_table = _filter_numeric_rows(macro.get("一分一段表", []), "累计人数")
+    score_table = filter_numeric_rows(macro.get("一分一段表", []), "累计人数")
     if not score_table:
         return None
     max_count = max(int(r.get("累计人数", 0)) for r in score_table)
@@ -391,7 +278,7 @@ def method_population_calibration(data, macro):
         return None
 
     # 高考特控线对应人数（从一分一段表查）
-    special_lines = _filter_numeric_rows(macro.get("特控线", []), "特控线分数")
+    special_lines = filter_numeric_rows(macro.get("特控线", []), "特控线分数")
     if not special_lines:
         return None
 
@@ -406,7 +293,7 @@ def method_population_calibration(data, macro):
     if not gaokao_line:
         return None
 
-    score_table = _filter_numeric_rows(macro.get("一分一段表", []), "累计人数")
+    score_table = filter_numeric_rows(macro.get("一分一段表", []), "累计人数")
     if not score_table:
         return None
 
@@ -769,26 +656,30 @@ def method_school_threshold(data, macro):
     ratio = (student_450 - te_line) / (zd_line - te_line)
     estimated_rank = int(te_rank - ratio * (te_rank - zd_rank))
 
-    # Get school total from 结构 sheet (富阳中学默认835，会被sheet数据覆盖)
-    school_total = 835
-    for key in macro:
-        if "期末" in str(key) and "结构" in str(key):
-            for row in macro[key]:
-                vals = list(row.values())
-                if len(vals) >= 2:
-                    text = str(vals[0]) if vals[0] else ""
-                    if "全校" in text:
-                        try:
-                            school_total = int(str(vals[1]).replace("人", ""))
-                        except (ValueError, TypeError):
-                            pass
-            break
+    # Get school total: prefer input data, then try macro sheets
+    school_total = data.get("school_total")
+    if not school_total:
+        # Try to read from macro data (any sheet with "结构" in name)
+        for key in macro:
+            if "结构" in str(key):
+                for row in macro[key]:
+                    vals = list(row.values())
+                    if len(vals) >= 2:
+                        text = str(vals[0]) if vals[0] else ""
+                        if "全校" in text:
+                            try:
+                                school_total = int(str(vals[1]).replace("人", ""))
+                            except (ValueError, TypeError):
+                                pass
+                break
+    if not school_total:
+        return None  # 无法估算，缺少学校总人数
 
     school_type = data.get("school_type", "省重点")
     coeff_map = {"省重点": 0.3, "市重点": 0.6, "区重点": 1.0, "普通": 1.5}
     coeff = coeff_map.get(school_type, 1.0)
 
-    score_table = _filter_numeric_rows(macro.get("一分一段表", []), "累计人数")
+    score_table = filter_numeric_rows(macro.get("一分一段表", []), "累计人数")
     if not score_table:
         return None
     max_count = max(int(r.get("累计人数", 0)) for r in score_table)
@@ -1076,7 +967,8 @@ def _find_previous_subject_data(workspace, subject_name, current_exam_name):
                         if raw:
                             return {"exam": exam_name, "score": float(raw), "field": f"选科{i}原始分", "exams_skipped": exams_skipped}
             exams_skipped += 1
-    except Exception:
+    except (KeyError, ValueError, TypeError, IOError):
+        # 数据损坏或格式异常时静默回退，不影响主流程
         return None
     return None
 
@@ -1108,7 +1000,7 @@ def compute_independent_subject_sum(data, macro):
     if main_raw <= 0:
         return None
 
-    special_lines = _filter_numeric_rows(macro.get("特控线", []), "特控线分数")
+    special_lines = filter_numeric_rows(macro.get("特控线", []), "特控线分数")
     gaokao_sl = None
     latest_year = -1
     for sl in special_lines:
@@ -1287,7 +1179,7 @@ def run(data):
     user_total = data.get("city_total") or data.get("alliance_total")
     if user_total:
         user_total = int(user_total)
-        score_table = _filter_numeric_rows(macro.get("一分一段表", []), "累计人数")
+        score_table = filter_numeric_rows(macro.get("一分一段表", []), "累计人数")
         if score_table:
             max_count = max(int(r.get("累计人数", 0)) for r in score_table)
             if max_count > 0 and user_total > 0:

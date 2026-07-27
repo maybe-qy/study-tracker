@@ -67,7 +67,7 @@ pip install -r requirements.txt
 ### 初始化工作区
 
 ```bash
-python src/scripts/setup_workspace.py --workspace .
+python3 src/scripts/setup_workspace.py --workspace .
 ```
 
 创建目录结构和带表头的 Excel 文件：
@@ -83,7 +83,7 @@ data/
 ### 录入第一次成绩
 
 ```bash
-python src/scripts/record_exam.py << 'EOF'
+python3 src/scripts/record_exam.py << 'EOF'
 {
   "workspace": ".",
   "exam_name": "10月月考",
@@ -106,22 +106,33 @@ EOF
 ### 计算等效分
 
 ```bash
-python src/scripts/calc_equivalent.py << 'EOF'
+python3 src/scripts/calc_equivalent.py << 'EOF'
 {
   "workspace": ".",
   "exam_name": "10月月考",
   "exam_date": "2025-10-15",
   "total_score": 580,
   "school_rank": 80,
-  "school_total": 835
+  "school_total": 835,
+  "special_line": 542.5,
+  "subjects": [
+    {"name": "语文", "raw": 105},
+    {"name": "数学", "raw": 110},
+    {"name": "英语", "raw": 115},
+    {"name": "物理", "raw": 78, "assigned": 85},
+    {"name": "化学", "raw": 72, "assigned": 88},
+    {"name": "生物", "raw": 68, "assigned": 82}
+  ]
 }
 EOF
 ```
 
 ### 保存等效分
 
+将上一步的输出通过管道传给 `save_equivalent.py`：
+
 ```bash
-python src/scripts/save_equivalent.py \
+python3 src/scripts/calc_equivalent.py < exam_data.json | python3 src/scripts/save_equivalent.py \
   --workspace . \
   --exam-name "10月月考" \
   --exam-date "2025-10-15"
@@ -130,7 +141,7 @@ python src/scripts/save_equivalent.py \
 ### 生成报告
 
 ```bash
-python src/scripts/generate_reports.py --workspace .
+python3 src/scripts/generate_reports.py --workspace .
 ```
 
 生成 8 份 HTML 报告到 `output/` 目录：
@@ -142,9 +153,7 @@ python src/scripts/generate_reports.py --workspace .
 | `语文追踪.html` | 语文单科历史和动态赋分 |
 | `数学追踪.html` | 数学单科历史和动态赋分 |
 | `英语追踪.html` | 英语单科历史和动态赋分 |
-| `选科1追踪.html` | 选科1单科历史和动态赋分 |
-| `选科2追踪.html` | 选科2单科历史和动态赋分 |
-| `选科3追踪.html` | 选科3单科历史和动态赋分 |
+| `选科追踪.html` | 选科单科历史和动态赋分（按实际选科命名，如「物理追踪.html」） |
 
 ## 等效分计算方法
 
@@ -154,6 +163,7 @@ python src/scripts/generate_reports.py --workspace .
 - **A/B 级**（±5-10 分）：双模块换算法
 - **B 级**（±10 分）：人数校准法、校排阈值估算法
 - **C 级**（±15 分）：校排名估算
+- **D 级**（±20 分）：数据不足，仅供参考
 
 ## 目录结构
 
@@ -178,7 +188,11 @@ study-tracker/
 ├── docs/                           # 项目介绍与竞品分析
 ├── data/                           # 数据目录
 ├── output/                         # 报告输出（Git忽略）
+├── 原则/                           # 红线与原则文档
+├── 推广/                           # 推广文案
 ├── requirements.txt
+├── requirements-dev.txt
+├── pyproject.toml
 ├── CHANGELOG.md
 └── LICENSE
 ```
@@ -222,7 +236,7 @@ study-tracker/
 
 **Q: 数据安全吗？**
 
-全部数据存储在本地 Excel 文件中，不上传任何信息到外部服务器。`data/` 目录已在 `.gitignore` 中排除。
+全部数据存储在本地 Excel 文件中，不上传任何信息到外部服务器。`data/personal/` 目录已在 `.gitignore` 中排除。
 
 ## 贡献
 

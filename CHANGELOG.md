@@ -13,7 +13,7 @@
 ### 更新文件
 | 文件 | 变更 |
 |------|------|
-| `src/QUICKSTART.md` | JSON格式修正 + 报告清单完善 + 文件交付指令 |
+| `skill/QUICKSTART.md` | JSON格式修正 + 报告清单完善 + 文件交付指令 |
 | `src/scripts/record_exam.py` | 新增 record_index 返回字段 |
 
 
@@ -37,7 +37,7 @@
 ### 更新文件
 | 文件 | 变更 |
 |------|------|
-| `src/QUICKSTART.md` | 新建 — AI助手快速指南 |
+| `skill/QUICKSTART.md` | 新建 — AI助手快速指南 |
 | `data/macro/宏观数据_只读.xlsx` | 替换为干净模板（省级数据+空学校模板） |
 | `data/school/学校招生_只读.xlsx` | 空模板（仅表头） |
 | `.gitignore` | data/ → data/personal/ |
@@ -150,9 +150,9 @@
 | `src/scripts/calc_equivalent.py` | 融合重构、docstring更新、冗余代码清理 |
 | `src/scripts/generate_reports.py` | EWMA→latest、目标院校展示、交叉验证2、DISCLAIMER清理 |
 | `src/assets/report_personal.html` | 目标院校独立展示（不依赖院校层次数据）|
-| `src/SKILL.md` | 个人信息残留删除、最低分描述删除 |
-| `src/references/calculation_methods.md` | 完整重写（方法编号统一）|
-| `src/references/interaction_examples.md` | 个人信息对话删除、方法描述更新 |
+| `skill/SKILL.md` | 个人信息残留删除、最低分描述删除 |
+| `skill/references/calculation_methods.md` | 完整重写（方法编号统一）|
+| `skill/references/interaction_examples.md` | 个人信息对话删除、方法描述更新 |
 | `CHANGELOG.md` | v3.1.x 版本记录补全 |
 
 ## 2026-07-21 — v3.1.2 个人档案展示计算过程
@@ -187,8 +187,8 @@
 |------|------|
 | `src/scripts/calc_equivalent.py` | 双模块换算法、校排阈值法、单科等效分重构 |
 | `src/scripts/generate_reports.py` | 计算详情展示、置信度展示 |
-| `src/SKILL.md` | 双模块换算法文档、新优先级表 |
-| `src/references/calculation_methods.md` | 新增双模块、校排阈值方法文档 |
+| `skill/SKILL.md` | 双模块换算法文档、新优先级表 |
+| `skill/references/calculation_methods.md` | 新增双模块、校排阈值方法文档 |
 | `CLAUDE.md` | 优先级表更新、双模块换算法说明 |
 
 ## 2026-07-21 — v3.0 置信度体系重构: 4级(A/B/C/D) + 单一主方法 + 单科等效分
@@ -213,8 +213,8 @@
 | 文件 | 变更 |
 |------|------|
 | `src/scripts/calc_equivalent.py` | 校排名估算、单科等效分、数据一致性校验、A/B/C/D四级 |
-| `src/SKILL.md` | 置信度表重写、单一主方法规则、展示规则 |
-| `src/references/calculation_methods.md` | 权重更新、校排名估算方法 |
+| `skill/SKILL.md` | 置信度表重写、单一主方法规则、展示规则 |
+| `skill/references/calculation_methods.md` | 权重更新、校排名估算方法 |
 | `CLAUDE.md` | 优先级表重新排序 |
 
 ## 2026-07-20 — v2.2 深度审查修正：一致性修复 & A/B/C 重命名
@@ -230,7 +230,7 @@
 | 文件 | 变更 |
 |------|------|
 | `src/scripts/calc_equivalent.py` | 优先级重排、B级重引入、三档分歧 |
-| `src/SKILL.md` | 置信度表、优先级表全部重写 |
+| `skill/SKILL.md` | 置信度表、优先级表全部重写 |
 | `CLAUDE.md` | 优先级表、方法分歧规则同步 |
 
 ## 2026-07-20 — v2.1 置信度体系修正 & 加权融合
@@ -265,9 +265,9 @@
 |------|------|
 | `src/scripts/calc_equivalent.py` | 等比例放缩 C→A、移除年级参数、三档分歧逻辑 |
 | `src/scripts/generate_reports.py` | DISCLAIMER 重写、CONFIDENCE_WEIGHTS 移除 B 级 |
-| `src/SKILL.md` | 置信度体系、优先级表、声明模板全部同步 |
-| `src/references/calculation_methods.md` | 完整重写（方法并列、三档分歧、去年级化） |
-| `src/tests/test_calc_equivalent.py` | 断言更新（C→A、B→A、grade_blocked→ok） |
+| `skill/SKILL.md` | 置信度体系、优先级表、声明模板全部同步 |
+| `skill/references/calculation_methods.md` | 完整重写（方法并列、三档分歧、去年级化） |
+| `tests/test_calc_equivalent.py` | 断言更新（C→A、B→A、grade_blocked→ok） |
 | `CLAUDE.md` | 优先级表、分歧规则、置信度缩写同步 |
 
 ## 2026-07-19 — v2.0 置信度体系重构 & 目录重组织
@@ -307,9 +307,9 @@
 | `src/scripts/record_exam.py` | 新增单科追踪同步写入 |
 | `src/scripts/save_equivalent.py` | 新建 — 等效分结果持久化 |
 | `src/assets/report_*.html` | CSS 四档统一、波动风格区、D 级样式 |
-| `src/SKILL.md` | 置信度、优先级、管线流程全部同步 |
-| `src/references/calculation_methods.md` | 完整重写（方法重排序、置信度重标） |
-| `src/tests/*` | 断言更新 + 3 新测试（35 通过） |
+| `skill/SKILL.md` | 置信度、优先级、管线流程全部同步 |
+| `skill/references/calculation_methods.md` | 完整重写（方法重排序、置信度重标） |
+| `tests/*` | 断言更新 + 3 新测试（35 通过） |
 | `基本.md` | 系统指令同步所有设计变更 |
 
 ### 数据层

@@ -123,6 +123,8 @@ echo '{
 
 ### 第 4 步：计算等效分
 
+**注意**：JSON 中需要包含 `subjects` 数组（从第3步录入数据中提取）和 `special_line`（用户提供的特控线，如未提供则省略）。
+
 ```bash
 cd <项目目录>
 echo '{
@@ -132,7 +134,15 @@ echo '{
   "total_score": 576,
   "school_rank": 150,
   "school_total": 600,
-  "special_line": 542.5
+  "special_line": 542.5,
+  "subjects": [
+    {"name": "语文", "raw": 102},
+    {"name": "数学", "raw": 128},
+    {"name": "英语", "raw": 110},
+    {"name": "物理", "raw": 70, "assigned": 82},
+    {"name": "化学", "raw": 68, "assigned": 79},
+    {"name": "技术", "raw": 88, "assigned": 84}
+  ]
 }' | python3 src/scripts/calc_equivalent.py
 ```
 
@@ -144,11 +154,15 @@ echo '{
   然后继续执行第6步生成报告（报告会显示'等待计算'状态）
 - 如果出现其他错误：把错误信息告诉用户，不要静默跳过
 
+**关于特控线（special_line）**：如果用户在录入时提供了特控线，必须在此步的 JSON 中带上。如果用户未提供特控线，省略该字段即可（系统会自动降级到 B/C 级方法）。
+
 ### 第 5 步：保存等效分
+
+**必须通过管道连接第4步的输出**，save_equivalent.py 从 stdin 读取计算结果：
 
 ```bash
 cd <项目目录>
-python3 src/scripts/save_equivalent.py \
+echo '{...第4步的JSON...}' | python3 src/scripts/calc_equivalent.py | python3 src/scripts/save_equivalent.py \
   --workspace . \
   --exam-name "11月期中" \
   --exam-date "2025-11"
@@ -161,7 +175,7 @@ cd <项目目录>
 python3 src/scripts/generate_reports.py --workspace .
 ```
 
-脚本运行后会返回 JSON，其中 `files` 字段包含所有生成的报告路径。**把所有报告文件都告诉用户**，不要只提一个。
+脚本运行后会返回 JSON，其中 `files` 字段包含所有生成的报告路径。**向用户列出所有报告文件名**，但无需全部输出内容（详见下方输出策略）。
 
 会生成的报告清单（每次运行都会生成全部）：
 

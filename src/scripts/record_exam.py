@@ -186,7 +186,9 @@ def create_md(workspace, data):
         notes=data.get("notes") or "",
     )
 
-    safe_name = f"{data['exam_date']}_{data['exam_name']}".replace("/", "_").replace("\\", "_")
+    safe_name = f"{data['exam_date']}_{data['exam_name']}"
+    for ch in '/\\:*?"<>|':
+        safe_name = safe_name.replace(ch, "_")
     md_dir = os.path.join(workspace, "data", "personal", "individual")
     os.makedirs(md_dir, exist_ok=True)
     md_path = os.path.join(md_dir, f"{safe_name}.md")
@@ -237,39 +239,102 @@ def update_subject_tracking(workspace, data):
     wb.save(tracking_path)
 
 
+def _check_duplicate(ws, exam_name, exam_date):
+    """Check if a record with the same exam_name and exam_date already exists."""
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        if not row or len(row) < 2:
+            continue
+        existing_name = str(row[0]).strip() if row[0] else ""
+        existing_date = str(row[1]).strip() if row[1] else ""
+        if existing_name == str(exam_name).strip() and existing_date == str(exam_date).strip():
+            return True
+    return False
+
+
 def run(data):
     workspace = os.path.abspath(data["workspace"])
     excel_path = os.path.join(workspace, "data", "personal", "成绩总表.xlsx")
 
     if not os.path.exists(excel_path):
-        return {"status": "error", "reason": f"成绩总表.xlsx 不存在，请先运行 setup_workspace.py"}
+        return {"status": "error", "reason": "成绩总表.xlsx 不存在，请先运行 setup_workspace.py"}
 
-    wb = load_workbook(excel_path)
+    try:
+        wb = load_workbook(excel_path)
+    except Exception as e:
+        return {"status": "error", "reason": f"成绩总表.xlsx 读取失败: {e}"}
+
+    if "成绩总表" not in wb.sheetnames:
+        wb.close()
+        return {"status": "error", "reason": "成绩总表.xlsx 中缺少「成绩总表」Sheet"}
+
     ws = wb["成绩总表"]
+
+    # 重复录入检测
+    exam_name = data.get("exam_name", "")
+    exam_date = data.get("exam_date", "")
+    if _check_duplicate(ws, exam_name, exam_date):
+        wb.close()
+        return {
+            "status": "error",
+            "reason": f"已存在相同考试记录（{exam_name} / {exam_date}），请勿重复录入。如需修改请直接编辑 Excel 文件。",
+        }
+
     row = build_row(data)
-    ws.append(row)
-    wb.save(excel_path)
 
-    # Also update 单科追踪.xlsx
-    update_subject_tracking(workspace, data)
+    try:
+        ws.append(row)
+        wb.save(excel_path)
+    except Exception as e:
+        wb.close()
+        return {"status": "error", "reason": f"成绩总表写入失败: {e}"}
+    finally:
+        try:
+            wb.close()
+        except Exception:
+            pass
 
-    md_path = create_md(workspace, data)
+    # 更新单科追踪（失败不影响主流程，但会返回警告）
+    warnings = []
+    try:
+        update_subject_tracking(workspace, data)
+    except Exception as e:
+        warnings.append(f"单科追踪更新失败: {e}")
 
-    return {
+    # 生成 MD 存档（失败不影响主流程，但会返回警告）
+    md_path = None
+    try:
+        md_path = create_md(workspace, data)
+    except Exception as e:
+        warnings.append(f"MD存档生成失败: {e}")
+
+    result = {
         "status": "ok",
         "row": ws.max_row,
         "record_index": ws.max_row - 1,  # 第几条记录（排除表头行）
         "md_path": md_path,
     }
+    if warnings:
+        result["warnings"] = warnings
+    return result
 
 
 def main():
-    data = json.loads(sys.stdin.read())
+    try:
+        data = json.loads(sys.stdin.read())
+    except json.JSONDecodeError as e:
+        print(json.dumps({"status": "error", "reason": f"JSON 解析失败: {e}"}, ensure_ascii=False))
+        sys.exit(1)
+
     err = validate(data)
     if err:
         print(json.dumps({"status": "error", "reason": err}, ensure_ascii=False))
         sys.exit(1)
-    result = run(data)
+
+    try:
+        result = run(data)
+    except Exception as e:
+        result = {"status": "error", "reason": f"未知错误: {e}"}
+
     print(json.dumps(result, ensure_ascii=False))
 
 

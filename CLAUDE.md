@@ -14,25 +14,27 @@
 src/scripts/     # Python 脚本（calc_equivalent, record_exam, generate_reports, save_equivalent, setup_workspace）
 src/assets/      # Jinja2 HTML 模板（report_personal, report_trend, report_subject）
 skill/           # Skill 定义与参考文档（SKILL.md, QUICKSTART.md, references/）
-tests/           # pytest 测试（35 通过，4 跳过）
+tests/           # pytest 测试（71 通过，4 跳过）
 docs/            # 项目介绍与竞品分析、报告截图
 data/macro/      # 宏观数据（一分一段表、特控线、对照表等）
 data/school/     # 学校招生录取数据
 data/personal/   # 个人数据（Git 忽略）
 output/          # 生成的 HTML 报告（Git 忽略）
+原则/            # 红线与原则文档
+推广/            # 推广文案
 ```
 
 ## 关键命令
 
 ```bash
 # 运行所有测试
-python -m pytest tests/ -v
+python3 -m pytest tests/ -v
 
 # 运行集成测试
-python -m pytest tests/test_integration_real_data.py -v -s
+python3 -m pytest tests/test_integration_real_data.py -v -s
 
 # 手动生成报告
-python src/scripts/generate_reports.py --workspace .
+python3 src/scripts/generate_reports.py --workspace .
 ```
 
 ## 等效分计算优先级

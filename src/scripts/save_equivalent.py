@@ -24,9 +24,17 @@ from openpyxl import load_workbook
 def run(workspace, exam_name, exam_date, calc_result, target_university=None, target_line=None):
     path = os.path.join(workspace, "data", "personal", "等效分记录.xlsx")
     if not os.path.exists(path):
-        return {"status": "error", "reason": f"等效分记录.xlsx 不存在"}
+        return {"status": "error", "reason": "等效分记录.xlsx 不存在"}
 
-    wb = load_workbook(path)
+    try:
+        wb = load_workbook(path)
+    except Exception as e:
+        return {"status": "error", "reason": f"等效分记录.xlsx 读取失败: {e}"}
+
+    if "等效分记录" not in wb.sheetnames:
+        wb.close()
+        return {"status": "error", "reason": "等效分记录.xlsx 中缺少「等效分记录」Sheet"}
+
     ws = wb["等效分记录"]
 
     # Build cross-validation columns
@@ -71,23 +79,32 @@ def run(workspace, exam_name, exam_date, calc_result, target_university=None, ta
         "calculation_detail": calc_detail,
     }, ensure_ascii=False)
 
-    ws.append([
-        exam_name,
-        exam_date,
-        calc_result.get("equivalent_score", ""),
-        confidence,
-        calc_result.get("primary_method", ""),
-        cv_method1, cv_score1,
-        cv_method2, cv_score2,
-        calc_result.get("error_lower", ""),
-        calc_result.get("error_upper", ""),
-        target_university or "",
-        target_line or "",
-        gap or "",
-        extra_info,
-    ])
+    try:
+        ws.append([
+            exam_name,
+            exam_date,
+            calc_result.get("equivalent_score", ""),
+            confidence,
+            calc_result.get("primary_method", ""),
+            cv_method1, cv_score1,
+            cv_method2, cv_score2,
+            calc_result.get("error_lower", ""),
+            calc_result.get("error_upper", ""),
+            target_university or "",
+            target_line or "",
+            gap or "",
+            extra_info,
+        ])
+        wb.save(path)
+    except Exception as e:
+        wb.close()
+        return {"status": "error", "reason": f"等效分记录写入失败: {e}"}
+    finally:
+        try:
+            wb.close()
+        except Exception:
+            pass
 
-    wb.save(path)
     return {
         "status": "ok",
         "row": ws.max_row,
@@ -106,18 +123,27 @@ def main():
     parser.add_argument("--target-line", default=None, type=float, help="Target university admission score")
     args = parser.parse_args()
 
-    calc_result = json.loads(sys.stdin.read())
+    try:
+        calc_result = json.loads(sys.stdin.read())
+    except json.JSONDecodeError as e:
+        print(json.dumps({"status": "error", "reason": f"JSON 解析失败（请确认通过管道连接 calc_equivalent.py）: {e}"}, ensure_ascii=False))
+        sys.exit(1)
+
     if calc_result.get("status") not in ("ok",):
         print(json.dumps({"status": "skipped", "reason": calc_result.get("reason", "unknown")}, ensure_ascii=False))
         sys.exit(0)
 
-    result = run(
-        os.path.abspath(args.workspace),
-        args.exam_name, args.exam_date,
-        calc_result,
-        args.target,
-        args.target_line,
-    )
+    try:
+        result = run(
+            os.path.abspath(args.workspace),
+            args.exam_name, args.exam_date,
+            calc_result,
+            args.target,
+            args.target_line,
+        )
+    except Exception as e:
+        result = {"status": "error", "reason": f"未知错误: {e}"}
+
     print(json.dumps(result, ensure_ascii=False))
 
 

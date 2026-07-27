@@ -21,6 +21,8 @@ from datetime import datetime
 from openpyxl import load_workbook
 from jinja2 import Environment, FileSystemLoader
 
+from excel_utils import read_sheet_dicts, read_macro_data
+
 DISCLAIMER = """声明与局限性
 
 1. 等效分方法：
@@ -31,8 +33,8 @@ DISCLAIMER = """声明与局限性
    等效分仅供参考，不构成对高考成绩的预测。
 
 2. 置信度分级：
-   A级：分数线对照法、校内排名对照法、全市/联盟排名锚定法、全市/联盟统一赋分。
-   B级：主科原始分、全市统考/联盟考试中无独立划线的选科。
+   A级：双模块换算法（多数模块）、分数线对照法、校内排名对照法、单科排名对照法、全市/联盟排名锚定法、全市/联盟统一赋分。
+   B级：双模块换算法（部分模块）、主科原始分、全市统考/联盟考试中无独立划线的选科。
    C级：校排名估算（无本校高考对照数据）。
    D级：无排名无分数线分数。
    趋势/波动分析权重：A=1.0, B=0.8, C=0.5, D 不参与。
@@ -42,53 +44,6 @@ DISCLAIMER = """声明与局限性
    单科等效分优先用赋分数据计算。
 
 4. 数据来源：用户上传。"""
-
-
-# 已知列名关键词集合，用于检测第1行是标题还是表头
-_KNOWN_COLUMN_KEYWORDS = {"分数", "排名", "累计人数", "年份", "人数", "特控线", "上线", "下限", "上限", "科目", "得分", "等效分", "原始分", "赋分", "总分", "成绩", "名称", "考试名", "日期", "置信度", "方法", "score", "rank", "count", "year", "name"}
-
-
-def _is_header_row(row_values):
-    """检测第一行是否为表头行（而非标题行）。"""
-    if not row_values:
-        return False
-    hits = 0
-    for v in row_values:
-        if v is None:
-            continue
-        sv = str(v).strip()
-        if sv in _KNOWN_COLUMN_KEYWORDS:
-            hits += 1
-        else:
-            for kw in _KNOWN_COLUMN_KEYWORDS:
-                if kw in sv:
-                    hits += 1
-                    break
-    if hits >= 2:
-        return True
-    return False
-
-
-def read_sheet_dicts(ws, skip_title_row=True):
-    """Read worksheet rows as dicts. Returns empty list if only headers."""
-    if ws.max_row < 2:
-        return []
-    header_row_idx = 1
-    if skip_title_row and ws.max_row >= 3:
-        row1_vals = tuple(cell.value for cell in ws[1])
-        if not _is_header_row(row1_vals):
-            row2_vals = tuple(cell.value for cell in ws[2]) if ws.max_row >= 3 else None
-            if row2_vals and _is_header_row(row2_vals):
-                header_row_idx = 2
-    headers = [str(cell.value) if cell.value is not None else f"col_{i}" for i, cell in enumerate(ws[header_row_idx])]
-    rows = []
-    for row in ws.iter_rows(min_row=header_row_idx + 1, values_only=True):
-        d = {}
-        for i, val in enumerate(row):
-            if i < len(headers):
-                d[headers[i]] = val
-        rows.append(d)
-    return rows
 
 
 def load_data(workspace):
@@ -123,31 +78,8 @@ def load_data(workspace):
             data["subjects"][name] = sort_by_date(read_sheet_dicts(wb[name]))
 
     # 宏观数据
-    path = os.path.join(workspace, "data", "macro", "宏观数据_只读.xlsx")
-    if not os.path.exists(path):
-        path = os.path.join(workspace, "data", "macro", "宏观数据.xlsx")
-    data["macro"] = {}
-    if os.path.exists(path):
-        wb = load_workbook(path, data_only=True)
-        # 模糊匹配关键Sheet名
-        def _find_sheet(sheets, keyword):
-            for name in sheets:
-                if keyword.lower() in name.lower():
-                    return name
-            return None
-        _sheet_key_map = {
-            "特控线": "特控线", "一分一段": "一分一段表",
-            "赋分区间": "赋分区间", "院校层次": "院校层次",
-        }
-        matched = set()
-        for key, display_name in _sheet_key_map.items():
-            found = _find_sheet(wb.sheetnames, key)
-            if found:
-                data["macro"][display_name] = read_sheet_dicts(wb[found])
-                matched.add(found)
-        for name in wb.sheetnames:
-            if name not in matched:
-                data["macro"][name] = read_sheet_dicts(wb[name])
+    macro_data = read_macro_data(workspace)
+    data["macro"] = macro_data if macro_data is not None else {}
 
     # 学校招生数据
     path = os.path.join(workspace, "data", "school", "学校招生_只读.xlsx")

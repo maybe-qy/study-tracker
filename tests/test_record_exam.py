@@ -33,7 +33,7 @@ def test_validate_all_required():
         "workspace": ".",
         "exam_name": "期末",
         "exam_date": "2026-01",
-        "exam_type": "全市统考",
+        "exam_type": "统考",
         "grade": "高一",
         "total_score": 650,
     }
@@ -46,7 +46,7 @@ def test_build_row():
     data = {
         "exam_name": "期末",
         "exam_date": "2026-01",
-        "exam_type": "全市统考",
+        "exam_type": "统考",
         "grade": "高一",
         "total_score": 650,
         "cn_score": 118,
@@ -78,7 +78,7 @@ def test_record_exam_end_to_end(tmpdir):
         "workspace": ws,
         "exam_name": "高一期末",
         "exam_date": "2026-01",
-        "exam_type": "全市统考",
+        "exam_type": "统考",
         "grade": "高一",
         "total_score": 650,
         "cn_score": 118,
@@ -113,7 +113,7 @@ def test_total_sum_mismatch_marker(tmpdir):
         "workspace": ws,
         "exam_name": "期末",
         "exam_date": "2026-01",
-        "exam_type": "校级考试",
+        "exam_type": "期末",
         "grade": "高一",
         "total_score": 650,  # Total is 650
         "cn_score": 100,     # Sum = 100+100+100+80+80+80 = 540 ≠ 650
