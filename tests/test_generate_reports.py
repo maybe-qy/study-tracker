@@ -114,7 +114,7 @@ def test_generate_reports_with_data(tmpdir):
         ws1.append([score, (i + 1) * 100, "浙江", 2026])
     ws2 = wb.create_sheet("特控线")
     ws2.append(["年份", "省份", "特控线分数"])
-    ws2.append([2026, "浙江", 592])
+    ws2.append([2026, "浙江", 594])
     wb.save(macro_path)
 
     # Record an exam

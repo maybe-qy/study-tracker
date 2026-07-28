@@ -87,7 +87,7 @@ python3 src/scripts/record_exam.py << 'EOF'
 {
   "workspace": ".",
   "exam_name": "10月月考",
-  "exam_date": "2025-10-15",
+  "exam_date": "2026-10-15",
   "exam_type": "月考",
   "grade": "高二",
   "total_score": 580,
@@ -110,7 +110,7 @@ python3 src/scripts/calc_equivalent.py << 'EOF'
 {
   "workspace": ".",
   "exam_name": "10月月考",
-  "exam_date": "2025-10-15",
+  "exam_date": "2026-10-15",
   "total_score": 580,
   "school_rank": 80,
   "school_total": 835,
@@ -135,7 +135,7 @@ EOF
 python3 src/scripts/calc_equivalent.py < exam_data.json | python3 src/scripts/save_equivalent.py \
   --workspace . \
   --exam-name "10月月考" \
-  --exam-date "2025-10-15"
+  --exam-date "2026-10-15"
 ```
 
 ### 生成报告

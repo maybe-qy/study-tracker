@@ -212,7 +212,7 @@
 echo '{...计算输入JSON...}' | python3 src/scripts/calc_equivalent.py | python3 src/scripts/save_equivalent.py \
   --workspace . \
   --exam-name "11月期中" \
-  --exam-date "2025-11"
+  --exam-date "2026-11"
 ```
 
 CLI参数：

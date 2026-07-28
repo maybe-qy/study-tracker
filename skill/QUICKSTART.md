@@ -69,7 +69,7 @@ https://github.com/maybe-qy/study-tracker
 | 总分 | 如果用户说了就用，没说就自动加总 | 否 |
 | 校排名/年级排名 | 如"150/600"表示第150名共600人 | 否 |
 | 考试名称 | 如"11月期中"、"3月月考" | 是（可追问） |
-| 考试日期 | 如"2025年11月"、"上个月" | 是（可追问） |
+| 考试日期 | 如"2026年11月"、"上个月" | 是（可追问） |
 
 **追问规则**：最多追问 1 次，只问考试名称和日期。其他字段缺失直接跳过。
 
@@ -82,7 +82,7 @@ cd <项目目录>
 echo '{
   "workspace": ".",
   "exam_name": "11月期中",
-  "exam_date": "2025-11",
+  "exam_date": "2026-11",
   "exam_type": "期中",
   "grade": "高二",
   "total_score": 576,
@@ -130,7 +130,7 @@ cd <项目目录>
 echo '{
   "workspace": ".",
   "exam_name": "11月期中",
-  "exam_date": "2025-11",
+  "exam_date": "2026-11",
   "total_score": 576,
   "school_rank": 150,
   "school_total": 600,
@@ -165,7 +165,7 @@ cd <项目目录>
 echo '{...第4步的JSON...}' | python3 src/scripts/calc_equivalent.py | python3 src/scripts/save_equivalent.py \
   --workspace . \
   --exam-name "11月期中" \
-  --exam-date "2025-11"
+  --exam-date "2026-11"
 ```
 
 ### 第 6 步：生成报告（输出HTML文件，不是应用）

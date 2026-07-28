@@ -344,7 +344,7 @@ def method_two_module(data, macro):
     splits calculation into two independent modules:
 
     Module 1 (语数英 450pt): proportional scaling between school cutoffs
-      and gaokao reference targets (特控340, 浙大378).
+      and gaokao reference targets (特控341, 浙大382).
 
     Module 2 (选科 100pt each): per-subject proportional scaling.
       Priority 1: dual-line (特控+浙大) → A级
@@ -438,8 +438,8 @@ def method_two_module(data, macro):
         return None
 
     # Gaokao reference targets
-    GK_MAIN_SPECIAL = 340  # 语数英特控目标 (330-350 中点)
-    GK_MAIN_ZD = 378       # 语数英浙大目标 (374-383 中点)
+    GK_MAIN_SPECIAL = 341  # 语数英特控目标 (331-351 中点)
+    GK_MAIN_ZD = 382       # 语数英浙大目标 (378-387 中点)
     GK_SUB_SPECIAL = 90    # 选科特控目标 (88-92 中点)
     GK_SUB_ZD = 96         # 选科浙大目标 (95-97 中点)
 

@@ -32,7 +32,7 @@ def make_macro_ws(tmpdir):
     # 特控线 sheet
     ws2 = wb.create_sheet("特控线")
     ws2.append(["年份", "省份", "特控线分数"])
-    ws2.append([2026, "浙江", 592])
+    ws2.append([2026, "浙江", 594])
 
     # 本校对照表_总分 sheet
     ws3 = wb.create_sheet("本校对照表_总分")
@@ -288,7 +288,7 @@ def make_macro_ws_with_upgrade(tmpdir):
 
     ws2 = wb.create_sheet("特控线")
     ws2.append(["年份", "省份", "特控线分数"])
-    ws2.append([2026, "浙江", 592])
+    ws2.append([2026, "浙江", 594])
 
     # 期末升级 sheet: col0=科目, col1=2027划线, col2=2027上线, col3=2028划线, col4=2028上线
     ws3 = wb.create_sheet("期末高一下升级")

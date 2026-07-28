@@ -42,7 +42,7 @@ def make_macro_with_threshold(tmpdir):
     # 特控线
     ws2 = wb.create_sheet("特控线")
     ws2.append(["年份", "省份", "特控线分数"])
-    ws2.append([2026, "浙江", 592])
+    ws2.append([2026, "浙江", 594])
 
     # 门槛数据 sheet — has 特控线上线人数
     ws3 = wb.create_sheet("门槛数据")
@@ -64,14 +64,14 @@ def test_population_calibration_direct():
             {"分数": 700, "累计人数": 1000, "省份": "浙江", "年份": 2026},
             {"分数": 650, "累计人数": 5000, "省份": "浙江", "年份": 2026},
             {"分数": 600, "累计人数": 15000, "省份": "浙江", "年份": 2026},
-            {"分数": 592, "累计人数": 20000, "省份": "浙江", "年份": 2026},
+            {"分数": 594, "累计人数": 20000, "省份": "浙江", "年份": 2026},
             {"分数": 550, "累计人数": 35000, "省份": "浙江", "年份": 2026},
             {"分数": 500, "累计人数": 50000, "省份": "浙江", "年份": 2026},
             {"分数": 400, "累计人数": 80000, "省份": "浙江", "年份": 2026},
             {"分数": 300, "累计人数": 100000, "省份": "浙江", "年份": 2026},
         ],
         "特控线": [
-            {"年份": 2026, "省份": "浙江", "特控线分数": 592},
+            {"年份": 2026, "省份": "浙江", "特控线分数": 594},
         ],
         "门槛数据": [
             {"考试名称": "11月期中", "特控线分数": 510, "特控线上线人数": 573},
@@ -96,7 +96,7 @@ def test_population_calibration_no_school_rank():
     """Without school_rank, population calibration returns None."""
     macro = {
         "一分一段表": [{"分数": 600, "累计人数": 10000}],
-        "特控线": [{"年份": 2026, "特控线分数": 592}],
+        "特控线": [{"年份": 2026, "特控线分数": 594}],
         "门槛数据": [{"特控线上线人数": 573}],
     }
     assert method_population_calibration({}, macro) is None
@@ -106,7 +106,7 @@ def test_population_calibration_no_threshold_sheet():
     """Without a 门槛/升级 sheet, returns None."""
     macro = {
         "一分一段表": [{"分数": 600, "累计人数": 10000}],
-        "特控线": [{"年份": 2026, "特控线分数": 592}],
+        "特控线": [{"年份": 2026, "特控线分数": 594}],
     }
     data = {"school_rank": 100}
     assert method_population_calibration(data, macro) is None
@@ -145,7 +145,7 @@ def test_perfect_score_750(tmpdir):
         ws1.append([score, (i + 1) * 100, "浙江", 2026])
     ws2 = wb.create_sheet("特控线")
     ws2.append(["年份", "省份", "特控线分数"])
-    ws2.append([2026, "浙江", 592])
+    ws2.append([2026, "浙江", 594])
     wb.save(os.path.join(macro_dir, "宏观数据_只读.xlsx"))
 
     data = {
@@ -173,7 +173,7 @@ def test_error_range_a_level(tmpdir):
         ws1.append([score, (i + 1) * 100, "浙江", 2026])
     ws2 = wb.create_sheet("特控线")
     ws2.append(["年份", "省份", "特控线分数"])
-    ws2.append([2026, "浙江", 592])
+    ws2.append([2026, "浙江", 594])
     wb.save(os.path.join(macro_dir, "宏观数据_只读.xlsx"))
 
     data = {
@@ -206,7 +206,7 @@ def test_divergence_low(tmpdir):
         ws1.append([score, (i + 1) * 100, "浙江", 2026])
     ws2 = wb.create_sheet("特控线")
     ws2.append(["年份", "省份", "特控线分数"])
-    ws2.append([2026, "浙江", 592])
+    ws2.append([2026, "浙江", 594])
     wb.save(os.path.join(macro_dir, "宏观数据_只读.xlsx"))
 
     # Use both special_line and alliance_rank to get 2 methods
@@ -353,7 +353,7 @@ def test_fusion_between_min_max(tmpdir):
         ws1.append([score, (i + 1) * 100, "浙江", 2026])
     ws2 = wb.create_sheet("特控线")
     ws2.append(["年份", "省份", "特控线分数"])
-    ws2.append([2026, "浙江", 592])
+    ws2.append([2026, "浙江", 594])
     wb.save(os.path.join(macro_dir, "宏观数据_只读.xlsx"))
 
     data = {
@@ -388,7 +388,7 @@ def test_single_method_no_fusion(tmpdir):
         ws1.append([score, (i + 1) * 100, "浙江", 2026])
     ws2 = wb.create_sheet("特控线")
     ws2.append(["年份", "省份", "特控线分数"])
-    ws2.append([2026, "浙江", 592])
+    ws2.append([2026, "浙江", 594])
     # 本校对照表 to make school_lookup available
     ws3 = wb.create_sheet("本校对照表_总分")
     ws3.append(["校内排名", "高考总分"])
