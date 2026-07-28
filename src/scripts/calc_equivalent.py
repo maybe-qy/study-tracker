@@ -457,20 +457,45 @@ def method_two_module(data, macro):
     # ── Module 1: 语数英 ──
     sch_special = main_data["special"]
     sch_zd = main_data.get("zd")
+    MAIN_MAX = 430   # 语数英等效上限（~143/科）
+    DAMPING = 0.3    # 超过浙大线后的衰减系数
 
     if sch_zd and student_main >= sch_special:
+        # Clamp ratio to [0, 1] for linear interpolation between special and ZJU
         ratio = (student_main - sch_special) / (sch_zd - sch_special)
-        main_eq = GK_MAIN_SPECIAL + (GK_MAIN_ZD - GK_MAIN_SPECIAL) * ratio
+        ratio_clamped = min(max(ratio, 0.0), 1.0)
+        main_eq = GK_MAIN_SPECIAL + (GK_MAIN_ZD - GK_MAIN_SPECIAL) * ratio_clamped
         conf = "A"
-        detail = (f"语数英{student_main:.0f}分, 校特控{sch_special:.0f}/浙大{sch_zd:.0f}"
-                  f" → 线上{ratio:.1%} → 等效{main_eq:.1f}")
+
+        # Diminishing returns for excess above ZJU line
+        if student_main > sch_zd:
+            excess = student_main - sch_zd
+            per_point = (GK_MAIN_ZD - GK_MAIN_SPECIAL) / (sch_zd - sch_special)
+            bonus = excess * DAMPING * per_point
+            main_eq = min(main_eq + bonus, MAIN_MAX)
+            detail = (f"语数英{student_main:.0f}分, 校特控{sch_special:.0f}/浙大{sch_zd:.0f}"
+                      f" → 线上{ratio_clamped:.0%}(封顶)+超额衰减×{DAMPING} → 等效{main_eq:.1f}")
+        else:
+            detail = (f"语数英{student_main:.0f}分, 校特控{sch_special:.0f}/浙大{sch_zd:.0f}"
+                      f" → 线上{ratio:.1%} → 等效{main_eq:.1f}")
     elif student_main >= sch_special:
         # Only special line available — single-point scaling
         ratio = student_main / sch_special
-        main_eq = GK_MAIN_SPECIAL * ratio
+        ratio_clamped = min(ratio, 1.0)
+        main_eq = GK_MAIN_SPECIAL * ratio_clamped
         conf = "B"
-        detail = (f"语数英{student_main:.0f}分, 校特控{sch_special:.0f}(无浙大线)"
-                  f" → 比例{ratio:.1%} → 等效{main_eq:.1f}")
+
+        # Diminishing returns for excess above special line
+        if student_main > sch_special:
+            excess = student_main - sch_special
+            per_point = GK_MAIN_SPECIAL / sch_special
+            bonus = excess * DAMPING * per_point
+            main_eq = min(main_eq + bonus, MAIN_MAX)
+            detail = (f"语数英{student_main:.0f}分, 校特控{sch_special:.0f}(无浙大线)"
+                      f" → 比例{ratio_clamped:.0%}(封顶)+超额衰减×{DAMPING} → 等效{main_eq:.1f}")
+        else:
+            detail = (f"语数英{student_main:.0f}分, 校特控{sch_special:.0f}(无浙大线)"
+                      f" → 比例{ratio:.1%} → 等效{main_eq:.1f}")
     else:
         return None  # Below special line, can't use this method
 
@@ -494,19 +519,37 @@ def method_two_module(data, macro):
         sub_cut = cutoffs.get(name, {})
 
         if sub_cut.get("special") and sub_cut.get("zd") and raw >= sub_cut["special"]:
-            # Priority 1: dual-line
+            # Priority 1: dual-line — clamp ratio to [0,1], diminishing returns above ZJU
             ratio = (raw - sub_cut["special"]) / (sub_cut["zd"] - sub_cut["special"])
-            sub_eq = GK_SUB_SPECIAL + (GK_SUB_ZD - GK_SUB_SPECIAL) * ratio
+            ratio_clamped = min(max(ratio, 0.0), 1.0)
+            sub_eq = GK_SUB_SPECIAL + (GK_SUB_ZD - GK_SUB_SPECIAL) * ratio_clamped
             conf = "A"
-            detail = (f"{name}{raw:.0f}分, 校特控{sub_cut['special']:.0f}/浙大{sub_cut['zd']:.0f}"
-                      f" → 线上{ratio:.1%} → 等效{sub_eq:.1f}")
+            if raw > sub_cut["zd"]:
+                excess = raw - sub_cut["zd"]
+                per_point = (GK_SUB_ZD - GK_SUB_SPECIAL) / (sub_cut["zd"] - sub_cut["special"])
+                bonus = excess * DAMPING * per_point
+                sub_eq = min(sub_eq + bonus, 100.0)
+                detail = (f"{name}{raw:.0f}分, 校特控{sub_cut['special']:.0f}/浙大{sub_cut['zd']:.0f}"
+                          f" → 线上{ratio_clamped:.0%}(封顶)+超额衰减×{DAMPING} → 等效{sub_eq:.1f}")
+            else:
+                detail = (f"{name}{raw:.0f}分, 校特控{sub_cut['special']:.0f}/浙大{sub_cut['zd']:.0f}"
+                          f" → 线上{ratio:.1%} → 等效{sub_eq:.1f}")
         elif sub_cut.get("special") and raw >= sub_cut["special"]:
-            # Priority 2: single-line
+            # Priority 2: single-line — clamp ratio, diminishing returns above special
             ratio = raw / sub_cut["special"]
-            sub_eq = GK_SUB_SPECIAL * ratio
+            ratio_clamped = min(ratio, 1.0)
+            sub_eq = GK_SUB_SPECIAL * ratio_clamped
             conf = "B"
-            detail = (f"{name}{raw:.0f}分, 校特控{sub_cut['special']:.0f}(无浙大线)"
-                      f" → 比例{ratio:.1%} → 等效{sub_eq:.1f}")
+            if raw > sub_cut["special"]:
+                excess = raw - sub_cut["special"]
+                per_point = GK_SUB_SPECIAL / sub_cut["special"]
+                bonus = excess * DAMPING * per_point
+                sub_eq = min(sub_eq + bonus, 100.0)
+                detail = (f"{name}{raw:.0f}分, 校特控{sub_cut['special']:.0f}(无浙大线)"
+                          f" → 比例{ratio_clamped:.0%}(封顶)+超额衰减×{DAMPING} → 等效{sub_eq:.1f}")
+            else:
+                detail = (f"{name}{raw:.0f}分, 校特控{sub_cut['special']:.0f}(无浙大线)"
+                          f" → 比例{ratio:.1%} → 等效{sub_eq:.1f}")
         elif sub_cut.get("special"):
             # Below special line
             ratio = raw / sub_cut["special"]
