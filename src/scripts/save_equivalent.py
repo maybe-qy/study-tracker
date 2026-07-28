@@ -51,8 +51,9 @@ def run(workspace, exam_name, exam_date, calc_result, target_university=None, ta
         cv_score2 = cross[1].get("score", "")
 
     gap = None
-    if target_line and calc_result.get("equivalent_score"):
-        gap = round(calc_result["equivalent_score"] - float(target_line), 1)
+    eq_score = calc_result.get("equivalent_score")
+    if target_line is not None and eq_score is not None:
+        gap = round(float(eq_score) - float(target_line), 1)
 
     # I5: 去掉置信度中的"级"后缀，存储纯 A/B/C/D
     confidence = str(calc_result.get("confidence", "")).replace("级", "")
@@ -91,8 +92,8 @@ def run(workspace, exam_name, exam_date, calc_result, target_university=None, ta
             calc_result.get("error_lower", ""),
             calc_result.get("error_upper", ""),
             target_university or "",
-            target_line or "",
-            gap or "",
+            target_line if target_line is not None else "",
+            gap if gap is not None else "",
             extra_info,
         ])
         wb.save(path)

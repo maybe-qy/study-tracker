@@ -14,6 +14,8 @@ import json
 import os
 import sys
 
+from openpyxl import load_workbook, Workbook
+
 HEADERS = {
     "成绩总表": [
         "考试名", "日期", "类型", "年级",
@@ -24,7 +26,7 @@ HEADERS = {
         "总分",
         "市/联盟排名", "市/联盟总人数",
         "校排名", "校总人数",
-        "特控线", "优划线", "满分制", "学校类型", "排名类型", "备注",
+        "特控线", "重点班未参考人数", "优划线", "满分制", "学校类型", "排名类型", "备注",
     ],
     "等效分记录": [
         "考试名", "日期",
@@ -61,6 +63,8 @@ MACRO_SHEETS = {
 
 SCHOOL_SHEETS = {
     "深大AI录取数据": ["年份", "专业", "录取最低分", "录取最低位次"],
+    "浙大2026投档线": ["专业名称", "投档线", "位次"],
+    "2026浙江一段投档线": ["院校名称", "专业名称", "投档线", "位次"],
 }
 
 
@@ -84,8 +88,6 @@ def create_excel(path, sheet_headers):
     Idempotency: skip if file exists AND has data (row count > 1).
     Recreate if file exists but only has headers (row count == 1 or file is empty).
     """
-    from openpyxl import load_workbook, Workbook
-
     if os.path.exists(path):
         # Check if file has actual data (not just headers)
         try:

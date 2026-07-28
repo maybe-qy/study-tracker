@@ -11,10 +11,10 @@
 ## 目录结构
 
 ```
-src/scripts/     # Python 脚本（calc_equivalent, record_exam, generate_reports, save_equivalent, setup_workspace）
+src/scripts/     # Python 脚本（config, calc_equivalent, record_exam, generate_reports, save_equivalent, excel_utils, setup_workspace）
 src/assets/      # Jinja2 HTML 模板（report_personal, report_trend, report_subject）
 skill/           # Skill 定义与参考文档（SKILL.md, QUICKSTART.md, references/）
-tests/           # pytest 测试（71 通过，4 跳过）
+tests/           # pytest 测试（运行 `pytest tests/ -v` 查看当前状态）
 docs/            # 项目介绍与竞品分析、报告截图
 data/macro/      # 宏观数据（一分一段表、特控线、对照表等）
 data/school/     # 学校招生录取数据

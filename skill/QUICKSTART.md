@@ -138,7 +138,7 @@ echo '{
 - `sub1_raw`/`sub2_raw`/`sub3_raw` = 选科原始分（卷面分）
 - `sub1_assigned`/`sub2_assigned`/`sub3_assigned` = 选科赋分（浙江选考赋分后的分数）
 - `exam_type` 从考试名推断：含"期末"→期末，含"期中"→期中，含"月考"→月考，含"联考"/"模考"→模考
-- `school_total` 从"150/600"格式自动提取分母
+- `school_total` 需作为独立字段传入（如"150/600"中的600）
 - 语数英没有赋分，只有 `cn_score`/`math_score`/`en_score`，不要加 `_assigned` 字段
 
 脚本返回 JSON，其中 `record_index` 表示这是第几条记录（1=第一次录入，2=第二次录入...）。根据 `record_index` 向用户说明：

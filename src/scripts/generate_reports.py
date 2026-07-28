@@ -22,6 +22,7 @@ from openpyxl import load_workbook
 from jinja2 import Environment, FileSystemLoader
 
 from excel_utils import read_sheet_dicts, read_macro_data
+from config import *  # noqa: F401,F403 — 统一导入 CONFIDENCE_WEIGHTS / EWMA_ALPHA / TREND_SLOPE_THRESHOLD 等常量
 
 DISCLAIMER = """声明与局限性
 
@@ -93,8 +94,52 @@ def load_data(workspace):
 
 
 # ─── HTML generation helpers ──────────────────────────────────────────
+# CONFIDENCE_WEIGHTS is imported from config.py (via `from config import *`)
 
-CONFIDENCE_WEIGHTS = {"A": 1.0, "B": 0.8, "C": 0.5, "D": 0.0}
+
+def ewma(scores, alpha=EWMA_ALPHA):
+    """指数加权移动平均（Exponentially Weighted Moving Average）。
+
+    共享实现，消除 4 处重复：render_personal / prediction_state /
+    eval_labels / render_subject。alpha 默认取 config.EWMA_ALPHA=0.3，
+    个人档案时间加权传 EWMA_ALPHA_PERSONAL=0.6。
+    """
+    if not scores:
+        return 0
+    result = scores[0]
+    for s in scores[1:]:
+        result = alpha * s + (1 - alpha) * result
+    return result
+
+
+def parse_eq_detail(detail_str):
+    """解析等效分记录的"详细信息" JSON，返回 dict 或 None。
+
+    共享实现，消除 3 处重复：render_personal / render_trend / render_subject。
+    对 calculation_detail 与 subject_scores 做防御性类型转换：
+      - calculation_detail：list → "|".join；非 str → str()
+      - subject_scores：dict → list-of-dict；非 list → []
+    """
+    if not detail_str:
+        return None
+    try:
+        obj = json.loads(detail_str)
+        # 防御性转换
+        cd = obj.get("calculation_detail", "")
+        if isinstance(cd, list):
+            cd = "|".join(str(x) for x in cd)
+        elif not isinstance(cd, str):
+            cd = str(cd)
+        obj["calculation_detail"] = cd
+        ss = obj.get("subject_scores", [])
+        if isinstance(ss, dict):
+            ss = [{"subject": k, "score": v} for k, v in ss.items()]
+        elif not isinstance(ss, list):
+            ss = []
+        obj["subject_scores"] = ss
+        return obj
+    except (json.JSONDecodeError, TypeError):
+        return None
 
 
 def filter_weighted(records):
@@ -114,8 +159,8 @@ def compute_trend(scores):
     """Determine trend direction: 'up', 'down', or 'flat'. Returns (class, arrow, text)."""
     if len(scores) < 2:
         return ("flat", "→", "数据不足")
-    # Simple linear trend on last 4 or all
-    recent = scores[-4:] if len(scores) >= 4 else scores
+    # Simple linear trend on last MIN_DATA_FOR_ANALYSIS or all
+    recent = scores[-MIN_DATA_FOR_ANALYSIS:] if len(scores) >= MIN_DATA_FOR_ANALYSIS else scores
     n = len(recent)
     if n < 2:
         return ("flat", "→", "持平")
@@ -127,9 +172,9 @@ def compute_trend(scores):
     if den == 0:
         return ("flat", "→", "持平")
     slope = num / den
-    if slope > 1.5:
+    if slope > TREND_SLOPE_THRESHOLD:
         return ("up", "↑", "上升")
-    elif slope < -1.5:
+    elif slope < -TREND_SLOPE_THRESHOLD:
         return ("down", "↓", "下降")
     else:
         return ("flat", "→", "持平")
@@ -137,37 +182,32 @@ def compute_trend(scores):
 
 def compute_volatility(scores):
     """Compute sigma and volatility range. Returns (sigma, lower, upper)."""
-    if len(scores) < 4:
+    if len(scores) < MIN_DATA_FOR_ANALYSIS:
         return (None, None, None)
     mean = statistics.mean(scores)
     sigma = statistics.stdev(scores)
-    return (round(sigma, 1), round(mean - 1.5 * sigma, 1), round(mean + 1.5 * sigma, 1))
+    return (round(sigma, 1), round(mean - VOLATILITY_SIGMA_MULT * sigma, 1), round(mean + VOLATILITY_SIGMA_MULT * sigma, 1))
 
 
 def compute_volatility_weighted(weighted_scores):
     """Weighted sigma and volatility range."""
-    if len(weighted_scores) < 4:
+    if len(weighted_scores) < MIN_DATA_FOR_ANALYSIS:
         return (None, None, None)
     scores = [s for s, _ in weighted_scores]
     weights = [w for _, w in weighted_scores]
     w_mean = sum(s * w for s, w in zip(scores, weights)) / sum(weights)
     w_var = sum(w * (s - w_mean) ** 2 for s, w in zip(scores, weights)) / sum(weights)
     sigma = w_var ** 0.5
-    return (round(sigma, 1), round(w_mean - 1.5 * sigma, 1), round(w_mean + 1.5 * sigma, 1))
+    return (round(sigma, 1), round(w_mean - VOLATILITY_SIGMA_MULT * sigma, 1), round(w_mean + VOLATILITY_SIGMA_MULT * sigma, 1))
 
 
 def prediction_state(scores):
     """Compute prediction label for latest score. Returns '积极'/'正常'/'消极'."""
-    if len(scores) < 4:
+    if len(scores) < MIN_DATA_FOR_ANALYSIS:
         return None
     # HP-filter simplified: use EWMA trend
-    alpha = 0.3
-    ewma = scores[0]
-    residuals = []
-    for i in range(len(scores)):
-        residuals.append(scores[i] - ewma)
-        ewma = alpha * scores[i] + (1 - alpha) * ewma
-    residuals = residuals[1:]  # drop first which is unreliable
+    # residual[i] = scores[i] - ewma(scores[:i])（基于前 i 个点的 EWMA 基线）
+    residuals = [scores[i] - ewma(scores[:i]) for i in range(1, len(scores))]
     if len(residuals) < 2:
         return "正常"
     q75 = sorted(residuals)[int(len(residuals) * 0.75)]
@@ -183,27 +223,23 @@ def prediction_state(scores):
 
 def eval_labels(scores):
     """Count positive/normal/negative labels + return label sequence for trend detection."""
-    if len(scores) < 4:
+    if len(scores) < MIN_DATA_FOR_ANALYSIS:
         return (None, None)
     labels = {"积极": 0, "正常": 0, "消极": 0}
     sequence = []
-    alpha = 0.3
-    # 预热：用前3个点建立EWMA基线
-    ewma = scores[0]
-    for s in scores[1:3]:
-        ewma = alpha * s + (1 - alpha) * ewma
+    # 预热：用前3个点建立EWMA基线（ewma(scores[:3]) 隐式完成）
     # 从第4个点开始标注（EWMA基于前i个点，当前点用于比较）
     for i in range(3, len(scores)):
-        if scores[i] > ewma + 3:
+        baseline = ewma(scores[:i])
+        if scores[i] > baseline + PREDICTION_THRESHOLD:
             labels["积极"] += 1
             sequence.append("积极")
-        elif scores[i] < ewma - 3:
+        elif scores[i] < baseline - PREDICTION_THRESHOLD:
             labels["消极"] += 1
             sequence.append("消极")
         else:
             labels["正常"] += 1
             sequence.append("正常")
-        ewma = alpha * scores[i] + (1 - alpha) * ewma
     return (labels, sequence)
 
 
@@ -287,15 +323,11 @@ def render_personal(data, env):
         )
 
     latest = eq_records[-1]
-    latest_equiv = float(latest.get("等效分（融合结果）", 0)) if latest.get("等效分（融合结果）") else None
+    latest_equiv = float(latest.get("等效分（融合结果）", 0)) if latest.get("等效分（融合结果）") is not None else None
     eq_scores = [float(r.get("等效分（融合结果）", 0) or 0) for r in eq_records if r.get("等效分（融合结果）")]
-    # 时间加权等效分（EWMA，α=0.6，越近权重越高）
+    # 时间加权等效分（EWMA，α=EWMA_ALPHA_PERSONAL=0.6，越近权重越高）
     if len(eq_scores) >= 2:
-        alpha = 0.6
-        ewma_score = eq_scores[0]
-        for s in eq_scores[1:]:
-            ewma_score = alpha * s + (1 - alpha) * ewma_score
-        ewma_score = round(ewma_score, 1)
+        ewma_score = round(ewma(eq_scores, alpha=EWMA_ALPHA_PERSONAL), 1)
     else:
         ewma_score = eq_scores[0] if eq_scores else 0
     weighted = filter_weighted(eq_records)
@@ -303,9 +335,9 @@ def render_personal(data, env):
     trend_class, trend_arrow, trend_text = compute_trend(eq_scores)
     sigma, vol_low, vol_high = compute_volatility_weighted(weighted)
     pred = prediction_state(eq_scores)
-    has_analysis = len(eq_scores) >= 4
+    has_analysis = len(eq_scores) >= MIN_DATA_FOR_ANALYSIS
     is_first_record = len(eq_scores) == 1
-    labels, label_sequence = eval_labels(eq_scores) if len(eq_scores) >= 4 else (None, None)
+    labels, label_sequence = eval_labels(eq_scores) if len(eq_scores) >= MIN_DATA_FOR_ANALYSIS else (None, None)
     volatility_style = classify_volatility_style(labels, sigma, label_sequence) if has_analysis else None
 
     # ── 院校定位 ──
@@ -314,7 +346,7 @@ def render_personal(data, env):
     target_line = latest.get("目标院校录取线")
     target_gap = latest.get("差距分数")
     # Auto-compute gap if not stored but we have both values
-    score = latest_equiv if latest_equiv else (eq_scores[-1] if eq_scores else 0)
+    score = latest_equiv if latest_equiv is not None else (eq_scores[-1] if eq_scores else 0)
     if target_gap is None and target_line is not None and score > 0:
         target_gap = round(score - target_line, 1)
 
@@ -391,25 +423,15 @@ def render_personal(data, env):
     # Extract calculation detail from latest record
     latest_calc_detail = ""
     latest_subject_scores = []
-    detail_str = latest.get("详细信息", "")
-    if detail_str:
-        try:
-            detail_obj = json.loads(detail_str)
-            latest_calc_detail = detail_obj.get("calculation_detail", "")
-            # 防御：list 转 string
-            if isinstance(latest_calc_detail, list):
-                latest_calc_detail = "|".join(str(x) for x in latest_calc_detail)
-            latest_subject_scores = detail_obj.get("subject_scores", [])
-            # 防御：dict 转 list-of-dict
-            if isinstance(latest_subject_scores, dict):
-                latest_subject_scores = [{"subject": k, "score": v} for k, v in latest_subject_scores.items()]
-        except (json.JSONDecodeError, TypeError):
-            pass
+    detail_obj = parse_eq_detail(latest.get("详细信息", ""))
+    if detail_obj:
+        latest_calc_detail = detail_obj.get("calculation_detail", "")
+        latest_subject_scores = detail_obj.get("subject_scores", [])
 
     template = env.get_template("report_personal.html")
     return template.render(
         generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
-        equivalent_score=f"{latest_equiv:.0f} 分" if latest_equiv else "暂无",
+        equivalent_score=f"{latest_equiv:.0f} 分" if latest_equiv is not None else "暂无",
         latest_equiv=latest_equiv or 0,
         confidence=latest.get("置信度", "-"),
         method=latest.get("主计算方法", "-"),
@@ -478,14 +500,8 @@ def render_trend(data, env):
     exams = []
     for r in eq_records:
         # Extract calculation detail from 详细信息 JSON
-        calc_detail = ""
-        detail_str = r.get("详细信息", "")
-        if detail_str:
-            try:
-                detail_obj = json.loads(detail_str)
-                calc_detail = detail_obj.get("calculation_detail", "")
-            except (json.JSONDecodeError, TypeError):
-                pass
+        detail_obj = parse_eq_detail(r.get("详细信息", ""))
+        calc_detail = detail_obj.get("calculation_detail", "") if detail_obj else ""
 
         exams.append({
             "date": r.get("日期", "-"),
@@ -510,9 +526,9 @@ def render_trend(data, env):
     weighted = filter_weighted(eq_records)
     trend_class, trend_arrow, trend_text = compute_trend(eq_scores)
     sigma, vol_low, vol_high = compute_volatility_weighted(weighted)
-    has_analysis = len(eq_scores) >= 4
+    has_analysis = len(eq_scores) >= MIN_DATA_FOR_ANALYSIS
     is_first_record = len(exams) == 1
-    labels, label_sequence = eval_labels(eq_scores) if len(eq_scores) >= 4 else (None, None)
+    labels, label_sequence = eval_labels(eq_scores) if len(eq_scores) >= MIN_DATA_FOR_ANALYSIS else (None, None)
     volatility_style = classify_volatility_style(labels, sigma, label_sequence) if has_analysis else None
 
     # Cross validations summary — extract both method 1 and method 2
@@ -566,12 +582,8 @@ def render_subject(data, env, subject_name, sheet_name):
     # Primary: extract per-subject equivalent scores from saved eq data
     if eq_records:
         for eq in eq_records:
-            detail_str = eq.get("详细信息", "")
-            if not detail_str:
-                continue
-            try:
-                detail_obj = json.loads(detail_str)
-            except (json.JSONDecodeError, TypeError):
+            detail_obj = parse_eq_detail(eq.get("详细信息", ""))
+            if not detail_obj:
                 continue
             for s in detail_obj.get("subject_scores", []):
                 if s.get("subject") != subject_name:
@@ -594,15 +606,15 @@ def render_subject(data, env, subject_name, sheet_name):
             for r in subject_data:
                 raw = r.get("原始分")
                 assigned = r.get("赋分")
-                if assigned and subject_name not in ("语文", "数学", "英语"):
+                if assigned is not None and assigned != "" and subject_name not in ("语文", "数学", "英语"):
                     scores.append(float(assigned))
                 else:
-                    scores.append(float(raw) if raw else None)
+                    scores.append(float(raw) if raw is not None and raw != "" else None)
                 records.append({
                     "date": r.get("日期", "-"),
                     "exam": r.get("考试名", "-"),
-                    "raw": raw or "-",
-                    "assigned": assigned or "-",
+                    "raw": raw if raw is not None and raw != "" else "-",
+                    "assigned": assigned if assigned is not None and assigned != "" else "-",
                     "confidence": r.get("赋分置信度") or "-",
                 })
         else:
@@ -622,15 +634,15 @@ def render_subject(data, env, subject_name, sheet_name):
                             break
                 if raw is None or raw == "":
                     continue
-                if assigned and subject_name not in ("语文", "数学", "英语"):
+                if assigned is not None and assigned != "" and subject_name not in ("语文", "数学", "英语"):
                     scores.append(float(assigned))
                 else:
                     scores.append(float(raw))
                 records.append({
                     "date": exam.get("日期", "-"),
                     "exam": exam.get("考试名", "-"),
-                    "raw": raw if raw else "-",
-                    "assigned": assigned if assigned else "-",
+                    "raw": raw if raw is not None and raw != "" else "-",
+                    "assigned": assigned if assigned is not None and assigned != "" else "-",
                     "confidence": conf if conf else "-",
                 })
 
@@ -642,12 +654,8 @@ def render_subject(data, env, subject_name, sheet_name):
         highest = "-"
         trend_class, trend_arrow, trend_text = "flat", "→", "无数据"
     else:
-        # EWMA for dynamic score
-        alpha = 0.3
-        dynamic = valid_scores[0]
-        for s in valid_scores[1:]:
-            dynamic = alpha * s + (1 - alpha) * dynamic
-        dynamic = round(dynamic, 1)
+        # EWMA for dynamic score (α=EWMA_ALPHA=0.3，越近权重越高)
+        dynamic = round(ewma(valid_scores, alpha=EWMA_ALPHA), 1)
         latest = valid_scores[-1]
         highest = max(valid_scores)
         trend_class, trend_arrow, trend_text = compute_trend(valid_scores)

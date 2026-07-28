@@ -14,7 +14,7 @@ Input JSON fields (optional):
   sub2_name, sub2_raw, sub2_assigned, sub2_confidence,
   sub3_name, sub3_raw, sub3_assigned, sub3_confidence,
   city_rank, city_total, alliance_rank, alliance_total,
-  school_rank, school_total, special_line, excellent_line, notes
+  school_rank, school_total, special_line, unexamined_top_students, excellent_line, notes
 """
 
 import json
@@ -31,8 +31,8 @@ OPTIONAL = [
     "sub2_name", "sub2_raw", "sub2_assigned", "sub2_confidence",
     "sub3_name", "sub3_raw", "sub3_assigned", "sub3_confidence",
     "city_rank", "city_total", "alliance_rank", "alliance_total",
-    "school_rank", "school_total", "special_line", "excellent_line",
-    "score_scale", "school_type", "rank_type", "notes",
+    "school_rank", "school_total", "special_line", "unexamined_top_students",
+    "excellent_line", "score_scale", "school_type", "rank_type", "notes",
 ]
 
 EXCEL_COLS = [
@@ -44,7 +44,7 @@ EXCEL_COLS = [
     "总分",
     "市/联盟排名", "市/联盟总人数",
     "校排名", "校总人数",
-    "特控线", "优划线", "满分制", "学校类型", "排名类型", "备注",
+    "特控线", "重点班未参考人数", "优划线", "满分制", "学校类型", "排名类型", "备注",
 ]
 
 MD_TEMPLATE = """# {exam_name}
@@ -124,6 +124,7 @@ def build_row(data):
         data.get("school_rank"),
         data.get("school_total"),
         data.get("special_line"),
+        data.get("unexamined_top_students"),
         data.get("excellent_line"),
         data.get("score_scale") or 750,
         data.get("school_type"),

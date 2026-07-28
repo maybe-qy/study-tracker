@@ -112,9 +112,10 @@ def find_sheet(sheets, keyword):
         for name in sheets:
             if display.lower() in name.lower():
                 return name
-    # Fallback to keyword match
+    # Fallback: sheets matching keyword but excluding known false positives
     for name in sheets:
-        if keyword.lower() in name.lower():
+        nl = name.lower()
+        if keyword.lower() in nl and "单科" not in nl:
             return name
     return None
 
@@ -149,3 +150,8 @@ def read_macro_data(workspace):
 def filter_numeric_rows(rows, key_field):
     """Filter rows to only those where key_field is numeric (int or float)."""
     return [r for r in rows if isinstance(r.get(key_field), (int, float))]
+
+
+def filter_score_table(rows):
+    """Filter 一分一段表 rows: require both '分数' and '累计人数' to be numeric."""
+    return [r for r in filter_numeric_rows(rows, "累计人数") if isinstance(r.get("分数"), (int, float))]

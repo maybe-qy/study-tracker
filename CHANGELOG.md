@@ -1,5 +1,49 @@
 # Changelog
 
+## 2026-07-28 — v4.1.0 架构重构：完整性与一体性
+
+### 重构
+- **新增 config.py**：集中管理所有业务常量（高考参考目标、置信度权重、学校类型系数、考试关键词、科目定义、趋势分析参数等），消除跨文件硬编码
+- **抽取共享函数**：`load_upgrade_sheet()`、`compute_main_raw_sum()`、`find_score_by_count()` 消除 calc_equivalent.py 中约100行重复代码
+- **抽取 EWMA 函数**：统一 4 处重复的指数加权移动平均实现，alpha 值从 config 读取
+- **抽取 JSON detail 解析**：`parse_eq_detail()` 统一 3 处等效分记录详细信息解析逻辑
+- **docstring 修正**：8 个计算方法的 docstring 优先级编号与 run() 实际调用顺序一致
+
+### 修复
+- `find_sheet` 兜底逻辑绕过"单科"排除规则的 bug
+- `_find_previous_subject_data` 内层循环变量 `i` 遮蔽外层 `i` 的 bug
+- `save_equivalent.py` gap 计算的 truthiness 检查导致等效分=0时gap不计算
+- `method_two_module` 当校特控线=浙大线时 ZeroDivisionError
+- `method_school_threshold` 当 te_line==zd_line 时 ZeroDivisionError
+- `generate_reports.py` raw=0 被 `if raw:` 当作缺失数据处理
+
+### 改进
+- `record_exam.py` 新增 `unexamined_top_students` 字段支持（重点班校准数据持久化）
+- `setup_workspace.py` 补全学校招生 Sheet 模板（浙大投档线、浙江一段投档线）
+- 测试文件清理：删除 5 个文件中冗余的 sys.path.insert，统一由 conftest.py 处理
+- setup_workspace.py 函数内 import 上移到文件顶部
+- SKILL.md 修复人数校准法空公式、方法计数从"8种"改为"7种有效+1种弃用"
+- QUICKSTART.md 修复 school_total 错误描述
+- 版本号从 3.3.1 更新到 4.1.0，CLAUDE.md 删除硬编码测试计数
+
+### 测试
+- 82 passed, 4 skipped（skip 项为依赖真实数据的集成测试）
+
+
+
+## 2026-07-23 — v4.0.0 置信度门槛 + 2026数据更新
+
+### 破坏性变更
+- **校排名估算弃用**：仅C级方法可用时不再返回等效分，直接返回 `insufficient_data`。原因：±15分跨度过大无决策价值
+- **2026浙江高考数据**：特控线594分、浙大线665分，替换原2025数据
+
+### 新增
+- 置信度门槛机制（A/B级方法至少一个可用才返回结果）
+- 双模块换算法超额衰减机制
+- 14个bug修复（2轮全盘扫描）
+
+
+
 ## 2026-07-23 — v3.3.1 豆包适配修复
 
 ### 严重修复

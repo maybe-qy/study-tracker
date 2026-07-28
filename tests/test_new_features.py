@@ -218,6 +218,40 @@ def test_save_equivalent_with_target(tmpdir):
     wb.close()
 
 
+def test_save_equivalent_gap_zero(tmpdir):
+    """Bug fix: gap=0 should be saved as 0, not empty string."""
+    ws = make_workspace(tmpdir)
+    record_exam(_sample_exam_data(ws))
+
+    calc_result = {
+        "status": "ok",
+        "equivalent_score": 665,
+        "confidence": "A级",
+        "primary_method": "分数线对照法",
+        "error_lower": 660,
+        "error_upper": 670,
+        "cross_validations": [],
+        "subject_scores": [],
+        "warnings": [],
+        "calculation_detail": "分数线对照法",
+    }
+
+    # Target line equals equivalent score → gap should be 0
+    result = save_equivalent(
+        ws, "11月期中", "2025-11", calc_result,
+        target_university="浙江大学",
+        target_line=665,
+    )
+    assert result["status"] == "ok"
+
+    wb = load_workbook(os.path.join(ws, "data", "personal", "等效分记录.xlsx"))
+    eq_ws = wb["等效分记录"]
+    gap_value = eq_ws.cell(2, 14).value  # col N = gap
+    # gap should be 0, not None or empty string
+    assert gap_value == 0
+    wb.close()
+
+
 # ── Windows filename safety ──────────────────────────────────────────
 
 
@@ -233,3 +267,41 @@ def test_safe_name_windows_chars(tmpdir):
     assert result["status"] == "ok"
     # MD file should exist with sanitized name
     assert os.path.exists(result["md_path"])
+
+
+def test_save_equivalent_gap_with_zero_equivalent(tmpdir):
+    """Bug fix: gap should be calculated even when equivalent_score is 0.
+
+    Previously `if target_line and calc_result.get("equivalent_score"):` used
+    truthiness, which skipped gap calculation when equivalent_score was 0.
+    Now uses `is not None` check.
+    """
+    ws = make_workspace(tmpdir)
+    record_exam(_sample_exam_data(ws))
+
+    calc_result = {
+        "status": "ok",
+        "equivalent_score": 0,
+        "confidence": "A级",
+        "primary_method": "分数线对照法",
+        "error_lower": -5,
+        "error_upper": 5,
+        "cross_validations": [],
+        "subject_scores": [],
+        "warnings": [],
+        "calculation_detail": "测试",
+    }
+
+    result = save_equivalent(
+        ws, "11月期中", "2025-11", calc_result,
+        target_university="测试大学",
+        target_line=500,
+    )
+    assert result["status"] == "ok"
+
+    wb = load_workbook(os.path.join(ws, "data", "personal", "等效分记录.xlsx"))
+    eq_ws = wb["等效分记录"]
+    gap_value = eq_ws.cell(2, 14).value  # col N = gap
+    # gap should be 0 - 500 = -500, not empty string
+    assert gap_value == -500
+    wb.close()
