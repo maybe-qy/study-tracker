@@ -115,7 +115,7 @@ def make_macro_ws_no_lookup(tmpdir):
 
 
 def test_school_rank_no_lookup_insufficient(tmpdir):
-    """校排名无对照表时，走校排名估算(C级)得出等效分."""
+    """仅校排名无对照表时，C级被置信度门槛拦截，返回insufficient_data."""
     ws = make_macro_ws_no_lookup(tmpdir)
     data = {
         "workspace": ws,
@@ -125,9 +125,8 @@ def test_school_rank_no_lookup_insufficient(tmpdir):
         "school_type": "市重点",
     }
     result = run(data)
-    assert result["status"] == "ok"
-    assert result["primary_method"] == "校排名估算"
-    assert result["confidence"] == "C"
+    assert result["status"] == "insufficient_data"
+    assert "特控线" in result["reason"] or "低精度" in result["reason"]
 
 
 def test_cross_validation(tmpdir):

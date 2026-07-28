@@ -1157,7 +1157,20 @@ def run(data):
     if not methods:
         return {
             "status": "insufficient_data",
-            "reason": "当前数据不足以计算等效分。至少需要以下之一：全市/联盟排名+一分一段表、模考特控线、校内排名+对照表。",
+            "reason": "当前数据不足以计算等效分。至少需要以下之一：本次考试特控线、全市/联盟排名、校内排名+对照表。",
+        }
+
+    # ── 置信度门槛：仅C级方法不可用 ──
+    # C级（校排名估算）误差±15分，跨度过大无决策价值
+    # 需要至少一个A或B级方法才返回结果
+    conf_order = {"A": 4, "B": 3, "C": 2, "D": 1}
+    best_confidence = max(methods, key=lambda m: conf_order.get(m["confidence"], 0))["confidence"]
+    if best_confidence in ("C", "D"):
+        return {
+            "status": "insufficient_data",
+            "reason": "当前仅有低精度数据（校排名），等效分误差±15分无参考价值。"
+                      "请补充以下任一数据以获得可用结果：1）本次考试特控线（问老师）→A级(±5分)；"
+                      "2）全市/联盟排名+总人数 →A级(±5分)。",
         }
 
     primary = methods[0]  # Highest priority method
@@ -1213,9 +1226,7 @@ def run(data):
             trust_note = f"方法分歧较大（最大差异{max_diff:.0f}分），建议补充排名或特控线数据以提高可靠性"
             divergence = "high"
 
-    # Determine overall confidence: highest among available methods
-    conf_order = {"A": 4, "B": 3, "C": 2, "D": 1}
-    best_confidence = max(methods, key=lambda m: conf_order.get(m["confidence"], 0))["confidence"]
+    # best_confidence already determined above (before C-level gate)
 
     # ── 数据一致性校验 ──
     warnings = []
