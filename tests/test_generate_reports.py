@@ -262,3 +262,136 @@ def test_generate_reports_with_data(tmpdir):
         assert os.path.exists(f), f"Missing: {f}"
         size = os.path.getsize(f)
         assert size > 100, f"File too small: {f} ({size} bytes)"
+
+
+# ── safe_float 单元测试 ──
+
+def test_safe_float_valid():
+    from generate_reports import safe_float
+    assert safe_float("123.5") == 123.5
+    assert safe_float(42) == 42.0
+    assert safe_float(0) == 0.0
+
+
+def test_safe_float_invalid():
+    from generate_reports import safe_float
+    assert safe_float("abc") is None
+    assert safe_float(None) is None
+    assert safe_float("", default=0) == 0
+
+
+# ── filter_weighted 边界测试 ──
+
+def test_filter_weighted_zero_score():
+    """0 分应被保留（0 是有效分数）"""
+    from generate_reports import filter_weighted
+    records = [
+        {"等效分（融合结果）": 0, "置信度": "A"},
+        {"等效分（融合结果）": 650, "置信度": "A"},
+    ]
+    weighted = filter_weighted(records)
+    assert len(weighted) == 2  # 0 分也应包含
+
+
+def test_filter_weighted_empty_string():
+    """空字符串应被排除"""
+    from generate_reports import filter_weighted
+    records = [
+        {"等效分（融合结果）": "", "置信度": "A"},
+        {"等效分（融合结果）": 650, "置信度": "A"},
+    ]
+    weighted = filter_weighted(records)
+    assert len(weighted) == 1
+
+
+# ── compute_trend / compute_volatility 边界测试 ──
+
+def test_compute_trend_empty():
+    trend_class, arrow, text = compute_trend([])
+    assert trend_class == "flat"
+    assert text == "数据不足"
+
+
+def test_compute_volatility_empty():
+    sigma, lower, upper = compute_volatility([])
+    assert sigma is None
+
+
+def test_compute_volatility_single():
+    sigma, lower, upper = compute_volatility([650])
+    assert sigma is None
+
+
+# ── P2/P3 修复：新工具函数测试 ──
+
+
+def test_build_subject_record_main_subject():
+    """语数英应使用原始分，忽略赋分"""
+    from generate_reports import _build_subject_record
+    rec, score = _build_subject_record("2026-01", "期末", 120, 100, "B", "语文")
+    assert score == 120.0
+    assert rec["score"] == "120.0"
+    assert rec["raw"] == 120
+    assert rec["assigned"] == 100  # 赋分仍记录但不用于分数
+
+
+def test_build_subject_record_elective_with_assigned():
+    """选科有赋分时应用赋分"""
+    from generate_reports import _build_subject_record
+    rec, score = _build_subject_record("2026-01", "期末", 78, 88, "A", "物理")
+    assert score == 88.0
+    assert rec["score"] == "88.0"
+    assert rec["raw"] == 78
+
+
+def test_build_subject_record_elective_raw_only():
+    """选科无赋分时用原始分"""
+    from generate_reports import _build_subject_record
+    rec, score = _build_subject_record("2026-01", "期末", 78, None, None, "化学")
+    assert score == 78.0
+    assert rec["score"] == "78.0"
+    assert rec["assigned"] == "-"
+
+
+def test_build_subject_record_no_data():
+    """无数据时 score 为 None"""
+    from generate_reports import _build_subject_record
+    rec, score = _build_subject_record("2026-01", "期末", None, "", None, "生物")
+    assert score is None
+    assert rec["score"] == "-"
+
+
+def test_compute_tier_info_with_data():
+    """有院校层次数据时应正确匹配梯队"""
+    from generate_reports import _compute_tier_info
+    macro = {
+        "院校层次": [
+            {"范围": "985", "梯队": "顶尖", "预估总分门槛": 680, "预估总分上限": 750, "代表院校": "清北"},
+            {"范围": "985", "梯队": "较高", "预估总分门槛": 650, "预估总分上限": 679, "代表院校": "浙大"},
+            {"范围": "211", "梯队": "中等", "预估总分门槛": 600, "预估总分上限": 649, "代表院校": "深大"},
+        ]
+    }
+    result = _compute_tier_info(macro, 660, None, None, None)
+    assert result is not None
+    assert result["current"]["name"] == "较高"
+    assert result["next"]["name"] == "顶尖"
+    assert result["next_gap"] == 20.0  # 680 - 660
+
+
+def test_compute_tier_info_no_data():
+    """无院校层次数据且无目标院校时返回 None"""
+    from generate_reports import _compute_tier_info
+    result = _compute_tier_info({}, 650, None, None, None)
+    assert result is None
+
+
+def test_compute_tier_info_target_only():
+    """无院校层次但有目标院校时应构建最小 tier_info"""
+    from generate_reports import _compute_tier_info
+    result = _compute_tier_info({}, 650, "浙大", 652, -2)
+    assert result is not None
+    assert result["target_university"] == "浙大"
+    assert result["target_line"] == 652
+    assert result["target_gap"] == -2
+    assert result["current"] is None
+    assert result["all_tiers"] == []

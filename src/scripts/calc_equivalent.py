@@ -9,10 +9,11 @@ Priority order (fixed ranking, first available wins as primary):
   5. 校内排名对照法 (School ranking lookup) — A级
   6. 单科排名对照法 (School subject lookup) — A级
   7. 排名锚定法 (Percentile anchoring) — A级，交叉验证
-  8. 校排名估算 (School rank estimation) — C级（已弃用）
+  8. 校排名估算 (School rank estimation) — C级（低精度回退，不参与融合）
 
 Confidence is A/B/C/D four levels, determined by data source and method.
-All available methods participate in weighted fusion by confidence.
+All A/B-level methods participate in weighted fusion by confidence.
+C-level methods appear in cross-validations for transparency but are excluded from fusion.
 Weights (A=1.0, B=0.8, C=0.5, D=0).
 
 Input: JSON via stdin
@@ -27,10 +28,105 @@ import sys
 from openpyxl import load_workbook
 
 from config import *  # noqa: F401,F403 — 统一业务常量
-from excel_utils import read_sheet_dicts, find_sheet, read_macro_data, filter_numeric_rows, filter_score_table
+from excel_utils import read_macro_data, filter_numeric_rows, filter_score_table
 
 
 # ── 共享工具函数（抽取自多个方法中的重复逻辑） ────────────────────────
+
+
+def safe_float(val, default=None):
+    """安全转换为 float，失败时返回 default。"""
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return default
+
+
+def find_latest_gaokao_special_line(special_lines):
+    """从特控线数据中查找最新年份的高考特控线。
+
+    消除 3 处重复逻辑：method_score_line / method_population_calibration /
+    compute_independent_subject_sum。
+
+    Returns:
+        (year, score) 元组，或 (None, None)。
+    """
+    latest_year = -1
+    gaokao_sl = None
+    for sl in special_lines:
+        try:
+            year = int(sl.get("年份", 0))
+        except (ValueError, TypeError):
+            continue
+        sl_val = sl.get("特控线分数")
+        if sl_val is None:
+            continue
+        try:
+            sl_f = float(sl_val)
+        except (ValueError, TypeError):
+            continue
+        if year > latest_year:
+            latest_year = year
+            gaokao_sl = sl_f
+    return (gaokao_sl, latest_year if latest_year > 0 else None)
+
+
+def parse_upgrade_sheet(ws):
+    """解析升级 Sheet 的非标准布局（特控线分段 + 浙大线分段）。
+
+    消除 method_two_module / method_school_threshold 中的重复解析逻辑。
+    Sheet 结构：标记行（含"特控"/"浙大"+"分段"）后跟数据行
+    数据行: col0=科目, col1=2027划线, col2=2027上线, col3=2028划线, col4=2028上线
+
+    Returns:
+        dict: {subject: {"special": line_val, "zd": line_val or None,
+                          "special_rank": count_val or None, "zd_rank": count_val or None}}
+    """
+    cutoffs = {}
+    current_section = None  # "special" or "zd"
+
+    for row in ws.iter_rows(min_row=1, values_only=True):
+        if not row:
+            continue
+        text_0 = str(row[0]).strip() if row[0] else ""
+
+        if "特控" in text_0 and "分段" in text_0:
+            current_section = "special"
+            continue
+        if "浙大" in text_0 and "分段" in text_0:
+            current_section = "zd"
+            continue
+        if current_section is None or len(row) < 5:
+            continue
+
+        subj = text_0
+        if subj == "科目" or not subj:
+            continue
+
+        # col3 = 2028划线 (分数线)
+        try:
+            line_2028 = float(row[3]) if row[3] is not None else None
+        except (ValueError, TypeError):
+            continue
+
+        # col4 = 2028上线 (人数)
+        try:
+            count_2028 = int(row[4]) if row[4] is not None else None
+        except (ValueError, TypeError):
+            count_2028 = None
+
+        if line_2028 is None and count_2028 is None:
+            continue
+
+        if subj not in cutoffs:
+            cutoffs[subj] = {"special": None, "zd": None, "special_rank": None, "zd_rank": None}
+
+        if line_2028 is not None:
+            cutoffs[subj][current_section] = line_2028
+        if count_2028 is not None:
+            cutoffs[subj][f"{current_section}_rank"] = count_2028
+
+    return cutoffs
 
 
 def load_upgrade_sheet(workspace, exam_name):
@@ -100,9 +196,12 @@ def compute_main_raw_sum(data):
     for subj in subjects_input:
         name = subj.get("name", "")
         raw = subj.get("raw")
-        if name in MAIN_SUBJECTS and raw is not None:
-            main_raw_sum += float(raw)
-            main_count += 1
+        if name in MAIN_SUBJECTS and raw is not None and raw != "":
+            try:
+                main_raw_sum += float(raw)
+                main_count += 1
+            except (ValueError, TypeError):
+                continue
 
     if main_count == 3:  # All three 语数英 scores present — use actual
         return main_raw_sum
@@ -128,10 +227,15 @@ def find_score_by_count(sorted_table, target_count):
     best_score = None
     best_diff = float("inf")
     for row in sorted_table:
-        diff = abs(int(row.get("累计人数", 0)) - target_count)
+        try:
+            count = int(row.get("累计人数", 0))
+            score = float(row["分数"])
+        except (ValueError, TypeError, KeyError):
+            continue
+        diff = abs(count - target_count)
         if diff < best_diff:
             best_diff = diff
-            best_score = float(row["分数"])
+            best_score = score
     return best_score
 
 
@@ -141,27 +245,24 @@ def method_score_line(data, macro):
     if not special_line_exam:
         return None
 
+    special_line_exam = safe_float(special_line_exam)
+    if special_line_exam is None:
+        return None
+
     special_lines = filter_numeric_rows(macro.get("特控线", []), "特控线分数")
     if not special_lines:
         return None
 
     # Find the most recent gaokao special line (by year)
-    gaokao_sl = None
-    latest_year = -1
-    for sl in special_lines:
-        if sl.get("特控线分数"):
-            try:
-                year = int(sl.get("年份", 0))
-            except (ValueError, TypeError):
-                continue
-            if year > latest_year:
-                latest_year = year
-                gaokao_sl = float(sl["特控线分数"])
+    gaokao_sl, _ = find_latest_gaokao_special_line(special_lines)
 
     if not gaokao_sl:
         return None
 
-    total_score = float(data["total_score"])
+    total_score = safe_float(data.get("total_score"))
+    if total_score is None or total_score == 0:
+        return None
+
     if total_score == FULL_SCORE:
         return {
             "method": "分数线对照法",
@@ -170,7 +271,7 @@ def method_score_line(data, macro):
             "detail": f"满分{FULL_SCORE} → 等效分{FULL_SCORE}",
         }
 
-    if float(special_line_exam) >= FULL_SCORE:
+    if special_line_exam >= FULL_SCORE:
         return None
 
     es = (FULL_SCORE - gaokao_sl) / (FULL_SCORE - special_line_exam) * (total_score - special_line_exam) + gaokao_sl
@@ -188,7 +289,6 @@ def method_school_lookup(data, macro):
     if not school_rank:
         return None
 
-    school_total = data.get("school_total")
     unexamined_top = data.get("unexamined_top_students", 0) or 0
 
     # Apply class-type calibration
@@ -198,8 +298,8 @@ def method_school_lookup(data, macro):
     if not lookup_sheet:
         return None
 
-    # Validate required columns exist
-    if not lookup_sheet or "校内排名" not in lookup_sheet[0]:
+    # Validate required columns exist in first row
+    if "校内排名" not in lookup_sheet[0]:
         return None
 
     # Filter to rows with numeric 校内排名 and 高考总分, then sort
@@ -264,7 +364,7 @@ def method_percentile(data, macro):
     rank = int(rank)
     total = int(total)
 
-    if rank > total:
+    if rank <= 0 or total <= 0 or rank > total:
         return None
 
     percentile = 1.0 - (rank / total)
@@ -297,10 +397,13 @@ def method_percentile(data, macro):
 
 
 def method_school_estimate(data, macro):
-    """优先级8（已弃用）: 校排名估算 — C级.
+    """优先级8: 校排名估算 — C级（低精度回退）.
 
     仅校内排名、无本校对照表时使用。用学校类型系数估算全市排名，
     再通过一分一段表百分位锚定得到等效分。
+
+    注意：此方法置信度为C级，被置信度门槛拦截（仅C级时返回insufficient_data），
+    但在有更高级方法时仍参与交叉验证以提供透明度。不参与加权融合。
     """
     school_rank = data.get("school_rank")
     school_total = data.get("school_total")
@@ -389,16 +492,7 @@ def method_population_calibration(data, macro):
     if not special_lines:
         return None
 
-    latest_year = -1
-    gaokao_line = None
-    for sl in special_lines:
-        try:
-            year = int(sl.get("年份", 0))
-        except (ValueError, TypeError):
-            continue
-        if year > latest_year:
-            latest_year = year
-            gaokao_line = float(sl["特控线分数"])
+    gaokao_line, _ = find_latest_gaokao_special_line(special_lines)
 
     if not gaokao_line:
         return None
@@ -464,43 +558,11 @@ def method_two_module(data, macro):
     if ws is None:
         return None
 
-    # Parse: find 2028届 cutoffs for all subjects
-    # Two sections: 特控线 and 浙大线, each has rows with 5 cols:
-    # col0=科目, col1=2027划线, col2=2027上线, col3=2028划线, col4=2028上线
-    cutoffs = {}  # {subject: {"special": val, "zd": val or None}}
-    current_section = None  # "special" or "zd"
-
-    for row in ws.iter_rows(min_row=1, values_only=True):
-        if not row:
-            continue
-        text_0 = str(row[0]).strip() if row[0] else ""
-
-        if "特控" in text_0 and "分段" in text_0:
-            current_section = "special"
-            continue
-        if "浙大" in text_0 and "分段" in text_0:
-            current_section = "zd"
-            continue
-        if current_section is None or len(row) < 5:
-            continue
-
-        subj = text_0
-        if subj == "科目" or not subj:
-            continue
-
-        try:
-            line_2028 = float(row[3]) if row[3] is not None else None
-        except (ValueError, TypeError):
-            continue
-
-        if line_2028 is None:
-            continue
-
-        if subj not in cutoffs:
-            cutoffs[subj] = {"special": None, "zd": None}
-        cutoffs[subj][current_section] = line_2028
-
-    wb.close()
+    # Parse upgrade sheet using shared function
+    try:
+        cutoffs = parse_upgrade_sheet(ws)
+    finally:
+        wb.close()
 
     # Need at least 语数英综合 special line
     main_data = cutoffs.get("语数英综合", {})
@@ -578,11 +640,14 @@ def method_two_module(data, macro):
         if name in MAIN_SUBJECTS:
             continue  # handled in module 1
         raw = subj.get("raw")
-        if raw is None:
+        if raw is None or raw == "":
             details.append(f"[{name}] 无原始分, 跳过")
             continue
 
-        raw = float(raw)
+        raw = safe_float(raw)
+        if raw is None:
+            details.append(f"[{name}] 原始分格式异常, 跳过")
+            continue
         sub_cut = cutoffs.get(name, {})
 
         if sub_cut.get("special") and sub_cut.get("zd") and sub_cut["zd"] != sub_cut["special"] and raw >= sub_cut["special"] and sub_cut["special"] > 0:
@@ -695,64 +760,36 @@ def method_school_threshold(data, macro):
     if ws is None:
         return None
 
-    # Parse with section tracking (same as method_two_module)
-    # Data rows: col0=科目, col1=2027划线, col2=2027上线, col3=2028划线, col4=2028上线
-    te_line = None
-    te_rank = None
-    zd_line = None
-    zd_rank = None
-    current_section = None  # "special" or "zd"
+    # Parse upgrade sheet using shared function (now includes rank data)
+    try:
+        cutoffs = parse_upgrade_sheet(ws)
+    finally:
+        wb.close()
 
-    for row in ws.iter_rows(min_row=1, values_only=True):
-        if not row:
-            continue
-        text_0 = str(row[0]).strip() if row[0] else ""
+    # Extract 语数英综合 特控线/浙大线 及对应上线人数
+    main_data = cutoffs.get("语数英综合", {})
+    te_line = main_data.get("special")
+    zd_line = main_data.get("zd")
+    te_rank = main_data.get("special_rank")
+    zd_rank = main_data.get("zd_rank")
 
-        if "特控" in text_0 and "分段" in text_0:
-            current_section = "special"
-            continue
-        if "浙大" in text_0 and "分段" in text_0:
-            current_section = "zd"
-            continue
-        if current_section is None or len(row) < 5:
-            continue
-
-        subj = text_0
-        if "语数英" not in subj or subj == "科目":
-            continue
-        try:
-            line_2028 = float(row[3]) if row[3] is not None else None
-            count_2028 = int(row[4]) if row[4] is not None else None
-        except (ValueError, TypeError):
-            continue
-        if line_2028 is None or count_2028 is None:
-            continue
-
-        if current_section == "special":
-            te_line, te_rank = line_2028, count_2028
-        elif current_section == "zd":
-            zd_line, zd_rank = line_2028, count_2028
-
-    wb.close()
-
-    if te_line is None or zd_line is None:
+    if te_line is None or zd_line is None or te_rank is None or zd_rank is None:
         return None
 
     # Use actual 语数英 raw score sum from subjects; fall back to proportional
     student_450 = compute_main_raw_sum(data)
 
-    if te_line is not None and zd_line is not None:
-        if te_line >= zd_line:
-            return None  # 特控线应低于浙大线，数据异常
+    if te_line >= zd_line:
+        return None  # 特控线应低于浙大线，数据异常
 
-        if not (te_line <= student_450 <= zd_line):
-            return None
+    if not (te_line <= student_450 <= zd_line):
+        return None
 
-        denom = zd_line - te_line
-        if denom == 0:
-            return None  # 除零保护
-        ratio = (student_450 - te_line) / denom
-        estimated_rank = int(te_rank - ratio * (te_rank - zd_rank))
+    denom = zd_line - te_line
+    if denom == 0:
+        return None  # 除零保护
+    ratio = (student_450 - te_line) / denom
+    estimated_rank = int(te_rank - ratio * (te_rank - zd_rank))
 
     # Get school total: prefer input data, then try macro sheets
     school_total = data.get("school_total")
@@ -825,6 +862,8 @@ def method_school_subject_lookup(data, macro):
         subj_rank = int(subj_rank)
         # 线性插值查找
         ranks = sorted(rank_map.keys())
+        if not ranks:
+            continue
         if subj_rank <= ranks[0]:
             eq_score = rank_map[ranks[0]]
         elif subj_rank >= ranks[-1]:
@@ -939,12 +978,17 @@ def compute_subject_equivalents(data, macro):
 
         if name in MAIN_SUBJECTS:
             if raw is not None and raw != "":
-                sum_main_raw += float(raw)
+                try:
+                    sum_main_raw += float(raw)
+                except (ValueError, TypeError):
+                    pass
             continue
 
         # 赋分直映
         if assigned is not None and assigned != "":
-            score = float(assigned)
+            score = safe_float(assigned)
+            if score is None:
+                continue
             # 归一化置信度
             confidence = str(subj.get("confidence", "B")).replace("级", "").strip().upper()
             if confidence not in ("A", "B", "C", "D"):
@@ -1001,8 +1045,9 @@ def compute_subject_equivalents(data, macro):
         raw = subj.get("raw")
         if name not in MAIN_SUBJECTS:
             continue
-        if raw and sum_main_raw > 0:
-            ratio = float(raw) / sum_main_raw
+        raw_f = safe_float(raw) if raw is not None and raw != "" else None
+        if raw_f is not None and raw_f > 0 and sum_main_raw > 0:
+            ratio = raw_f / sum_main_raw
             eq = round(remaining * ratio, 1)
             results.append({
                 "subject": name, "score": eq, "confidence": "B",
@@ -1100,20 +1145,17 @@ def compute_independent_subject_sum(data, macro):
     for subj in subjects:
         name = subj.get("name", "")
         raw = subj.get("raw")
-        if name in MAIN_SUBJECTS and raw is not None:
-            main_raw += float(raw)
+        if name in MAIN_SUBJECTS and raw is not None and raw != "":
+            try:
+                main_raw += float(raw)
+            except (ValueError, TypeError):
+                pass
 
     if main_raw <= 0:
         return None
 
     special_lines = filter_numeric_rows(macro.get("特控线", []), "特控线分数")
-    gaokao_sl = None
-    latest_year = -1
-    for sl in special_lines:
-        year = int(sl.get("年份", 0))
-        if year > latest_year:
-            latest_year = year
-            gaokao_sl = float(sl["特控线分数"])
+    gaokao_sl, _ = find_latest_gaokao_special_line(special_lines)
 
     if not gaokao_sl or not special_line_exam:
         return None
@@ -1147,8 +1189,10 @@ def compute_independent_subject_sum(data, macro):
             continue
         assigned = subj.get("assigned")
         if assigned is not None and assigned != "":
-            subject_sum += float(assigned)
-            confidences.append("B")
+            assigned_f = safe_float(assigned)
+            if assigned_f is not None:
+                subject_sum += assigned_f
+                confidences.append("B")
 
     if not confidences:
         return None
@@ -1163,9 +1207,20 @@ def compute_independent_subject_sum(data, macro):
 def run(data):
     workspace = os.path.abspath(data.get("workspace", "."))
 
+    # 输入校验
+    total_score = data.get("total_score")
+    if total_score is None:
+        return {"status": "error", "reason": "缺少必填字段: total_score"}
+    total_score = safe_float(total_score)
+    if total_score is None or total_score <= 0:
+        return {"status": "error", "reason": f"total_score 值无效: {data.get('total_score')}"}
+
     # 满分制换算：450分制 → 750分制
-    score_scale = int(data.get("score_scale", FULL_SCORE) or FULL_SCORE)
-    original_total_score = float(data["total_score"])  # 保存原始制总分，供单科比例计算使用
+    try:
+        score_scale = int(data.get("score_scale", FULL_SCORE) or FULL_SCORE)
+    except (ValueError, TypeError):
+        score_scale = FULL_SCORE
+    original_total_score = total_score  # 保存原始制总分，供单科比例计算使用
     if score_scale == MAIN_FULL_SCORE:
         data = dict(data)
         data["_original_total_score"] = original_total_score

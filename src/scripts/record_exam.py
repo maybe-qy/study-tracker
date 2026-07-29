@@ -20,7 +20,6 @@ Input JSON fields (optional):
 import json
 import os
 import sys
-from datetime import datetime
 
 from openpyxl import load_workbook
 
@@ -138,20 +137,28 @@ def create_md(workspace, data):
     # Calculate sum check: 语数英原始分 + 选科赋分（有赋分用赋分，没有用原始分）
     # 450分制考试总分仅含语数英，不包含选科
     score_scale = int(data.get("score_scale", 750) or 750)
+    if score_scale <= 0:
+        score_scale = 750
+
+    def _safe_float(v):
+        try:
+            return float(v) if v is not None else 0
+        except (ValueError, TypeError):
+            return 0
     cn = data.get("cn_score")
     math = data.get("math_score")
     en = data.get("en_score")
-    comparison_sum = (float(cn) if cn is not None else 0) + (float(math) if math is not None else 0) + (float(en) if en is not None else 0)
+    comparison_sum = _safe_float(cn) + _safe_float(math) + _safe_float(en)
     if score_scale != 450:
         for i in range(1, 4):
             assigned = data.get(f"sub{i}_assigned")
             raw = data.get(f"sub{i}_raw")
             if assigned is not None and assigned != "":
-                comparison_sum += float(assigned)
+                comparison_sum += _safe_float(assigned)
             elif raw is not None and raw != "":
-                comparison_sum += float(raw)
+                comparison_sum += _safe_float(raw)
     total = data["total_score"]
-    if abs(comparison_sum - float(total)) > 0.5:
+    if abs(comparison_sum - _safe_float(total)) > 0.5:
         check_note = f"各科加总（选科有赋分用赋分）= {comparison_sum}，≠ 总分 {total}（用户确认以总分为准）"
     else:
         check_note = f"各科加总 = {comparison_sum}，与总分一致"

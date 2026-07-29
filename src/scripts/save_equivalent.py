@@ -140,8 +140,17 @@ def main():
     parser.add_argument("--exam-name", required=True)
     parser.add_argument("--exam-date", required=True)
     parser.add_argument("--target", default=None, help="Target university name")
-    parser.add_argument("--target-line", default=None, type=float, help="Target university admission score")
+    parser.add_argument("--target-line", default=None, help="Target university admission score")
     args = parser.parse_args()
+
+    # 手动转换 target-line，统一错误格式
+    target_line = None
+    if args.target_line is not None:
+        try:
+            target_line = float(args.target_line)
+        except (ValueError, TypeError):
+            print(json.dumps({"status": "error", "reason": f"--target-line 值无效: {args.target_line}"}, ensure_ascii=False))
+            sys.exit(1)
 
     try:
         calc_result = json.loads(sys.stdin.read())
@@ -163,14 +172,11 @@ def main():
             args.exam_name, args.exam_date,
             calc_result,
             args.target,
-            args.target_line,
+            target_line,
         )
     except Exception as e:
         result = {"status": "error", "reason": f"未知错误: {e}"}
 
-    # 保存 max_row 到局部变量，避免 wb.close() 后访问
-    if "row" in result:
-        pass  # run() 已在 wb.close() 前获取
     print(json.dumps(result, ensure_ascii=False))
 
 

@@ -63,7 +63,7 @@
       </div>
       <div class="error-range">误差区间 [{{ error_lower }}, {{ error_upper }}]</div>
     </div>
-    {% if tier_info.target_university %}
+    {% if tier_info and tier_info.target_university %}
     <div style="flex-shrink:0;border-left:1px solid #e8ecf1;padding-left:40px;margin-right:8%;">
       {% if tier_info.target_logo %}<img src="{{ tier_info.target_logo }}" style="width:250px;height:250px;border-radius:14px;box-shadow:0 2px 12px rgba(0,0,0,.06);display:block;">{% endif %}
     </div>

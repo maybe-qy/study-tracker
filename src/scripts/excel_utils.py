@@ -137,25 +137,38 @@ def read_macro_data(workspace):
     if not os.path.exists(path):
         return None
     wb = load_workbook(path, data_only=True)
-    data = {}
-    # 先用模糊匹配定位关键 Sheet
-    matched = set()
-    for key, display_name in SHEET_KEY_MAP.items():
-        found = find_sheet(wb.sheetnames, key)
-        if found:
-            data[display_name] = read_sheet_dicts(wb[found])
-            matched.add(found)
-    # 其余 Sheet 保留原名
-    for name in wb.sheetnames:
-        if name not in matched:
-            data[name] = read_sheet_dicts(wb[name])
-    wb.close()
+    try:
+        data = {}
+        # 先用模糊匹配定位关键 Sheet
+        matched = set()
+        for key, display_name in SHEET_KEY_MAP.items():
+            found = find_sheet(wb.sheetnames, key)
+            if found:
+                data[display_name] = read_sheet_dicts(wb[found])
+                matched.add(found)
+        # 其余 Sheet 保留原名
+        for name in wb.sheetnames:
+            if name not in matched:
+                data[name] = read_sheet_dicts(wb[name])
+    finally:
+        wb.close()
     return data
 
 
 def filter_numeric_rows(rows, key_field):
-    """Filter rows to only those where key_field is numeric (int or float)."""
-    return [r for r in rows if isinstance(r.get(key_field), (int, float))]
+    """Filter rows to only those where key_field is numeric (int, float, or numeric string)."""
+    result = []
+    for r in rows:
+        v = r.get(key_field)
+        if isinstance(v, (int, float)):
+            result.append(r)
+        elif isinstance(v, str):
+            try:
+                float(v)
+                result.append(r)
+            except (ValueError, TypeError):
+                continue
+    return result
 
 
 def filter_score_table(rows):

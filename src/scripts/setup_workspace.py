@@ -111,16 +111,19 @@ def create_excel(path, sheet_headers):
             pass
 
     wb = Workbook()
-    first = True
-    for sheet_name, headers in sheet_headers.items():
-        if first:
-            ws = wb.active
-            ws.title = sheet_name
-            first = False
-        else:
-            ws = wb.create_sheet(title=sheet_name)
-        ws.append(headers)
-    wb.save(path)
+    try:
+        first = True
+        for sheet_name, headers in sheet_headers.items():
+            if first:
+                ws = wb.active
+                ws.title = sheet_name
+                first = False
+            else:
+                ws = wb.create_sheet(title=sheet_name)
+            ws.append(headers)
+        wb.save(path)
+    finally:
+        wb.close()
     return path
 
 

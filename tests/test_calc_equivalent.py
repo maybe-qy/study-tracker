@@ -181,7 +181,7 @@ def test_priority_order(tmpdir):
 
 
 def test_rank_exceeds_total(tmpdir):
-    """Test that rank > total is caught."""
+    """Test that rank > total is caught and method returns None."""
     ws = make_macro_ws(tmpdir)
     data = {
         "workspace": ws,
@@ -190,8 +190,8 @@ def test_rank_exceeds_total(tmpdir):
         "alliance_total": 1000,  # rank exceeds total
     }
     result = run(data)
-    # Should fall through to insufficient since percentile method fails
-    assert result["status"] in ("insufficient_data", "ok")
+    # percentile method should fail (rank > total), no other method has data
+    assert result["status"] == "insufficient_data"
 
 
 def test_percentile_gaoer(tmpdir):
@@ -377,3 +377,190 @@ def test_independent_subject_sum(tmpdir):
     assert "confidences" in result
     assert len(result["confidences"]) == 6  # 3 main + 3 elective
     assert result["sum"] > 0
+
+
+# ── 共享工具函数测试 ──
+
+def test_safe_float():
+    from calc_equivalent import safe_float
+    assert safe_float("123.5") == 123.5
+    assert safe_float(42) == 42.0
+    assert safe_float("abc") is None
+    assert safe_float(None) is None
+    assert safe_float(0) == 0.0
+
+
+def test_find_latest_gaokao_special_line():
+    from calc_equivalent import find_latest_gaokao_special_line
+    lines = [
+        {"年份": 2024, "特控线分数": 590},
+        {"年份": 2026, "特控线分数": 594},
+        {"年份": 2025, "特控线分数": 592},
+    ]
+    score, year = find_latest_gaokao_special_line(lines)
+    assert score == 594.0
+    assert year == 2026
+
+
+def test_find_latest_gaokao_special_line_empty():
+    from calc_equivalent import find_latest_gaokao_special_line
+    score, year = find_latest_gaokao_special_line([])
+    assert score is None
+    assert year is None
+
+
+def test_find_latest_gaokao_special_line_invalid_year():
+    from calc_equivalent import find_latest_gaokao_special_line
+    lines = [
+        {"年份": "abc", "特控线分数": 590},
+        {"年份": 2026, "特控线分数": 594},
+    ]
+    score, year = find_latest_gaokao_special_line(lines)
+    assert score == 594.0
+    assert year == 2026
+
+
+def test_compute_main_raw_sum_all_present():
+    from calc_equivalent import compute_main_raw_sum
+    data = {
+        "total_score": 650,
+        "subjects": [
+            {"name": "语文", "raw": 120},
+            {"name": "数学", "raw": 130},
+            {"name": "英语", "raw": 110},
+        ],
+    }
+    result = compute_main_raw_sum(data)
+    assert result == 360.0
+
+
+def test_compute_main_raw_sum_partial():
+    from calc_equivalent import compute_main_raw_sum
+    data = {
+        "total_score": 650,
+        "subjects": [
+            {"name": "语文", "raw": 120},
+            {"name": "数学", "raw": 130},
+        ],
+    }
+    # Only 2 of 3 main subjects → proportional fallback
+    result = compute_main_raw_sum(data)
+    assert result > 0
+
+
+def test_find_score_by_count_basic():
+    from calc_equivalent import find_score_by_count
+    table = [
+        {"分数": 700, "累计人数": 100},
+        {"分数": 650, "累计人数": 500},
+        {"分数": 600, "累计人数": 1000},
+    ]
+    result = find_score_by_count(table, 500)
+    assert result == 650.0
+
+
+def test_find_score_by_count_empty():
+    from calc_equivalent import find_score_by_count
+    result = find_score_by_count([], 500)
+    assert result is None
+
+
+def test_find_score_by_count_invalid_rows():
+    from calc_equivalent import find_score_by_count
+    table = [
+        {"分数": "abc", "累计人数": 100},
+        {"分数": 650, "累计人数": 500},
+    ]
+    result = find_score_by_count(table, 500)
+    assert result == 650.0
+
+
+def test_run_missing_total_score():
+    """P0: 缺少 total_score 应返回明确错误"""
+    data = {"workspace": "/tmp"}
+    result = run(data)
+    assert result["status"] == "error"
+    assert "total_score" in result["reason"]
+
+
+def test_run_invalid_total_score():
+    """P0: total_score 非数值应返回明确错误"""
+    data = {"workspace": "/tmp", "total_score": "abc"}
+    result = run(data)
+    assert result["status"] == "error"
+
+
+def test_method_percentile_negative_total():
+    """P1: total 为负数时应返回 None"""
+    from calc_equivalent import method_percentile
+    data = {"alliance_rank": 100, "alliance_total": -1}
+    result = method_percentile(data, {"一分一段表": []})
+    assert result is None
+
+
+# ── P2/P3 修复测试 ──
+
+
+def test_find_latest_gaokao_special_line_missing_key():
+    """P2: 特控线分数字段缺失时不应抛出 KeyError"""
+    from calc_equivalent import find_latest_gaokao_special_line
+    lines = [
+        {"年份": 2024, "特控线分数": 590},
+        {"年份": 2026},  # 缺少特控线分数
+        {"年份": 2025, "特控线分数": "abc"},  # 非数值
+    ]
+    score, year = find_latest_gaokao_special_line(lines)
+    assert score == 590.0
+    assert year == 2024  # 只有 2024 有有效分数
+
+
+def test_parse_upgrade_sheet_returns_rank_data():
+    """P2: parse_upgrade_sheet 应同时返回分数线和上线人数"""
+    from calc_equivalent import parse_upgrade_sheet
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "期末升级"
+    ws.append(["科目", "2027划线", "2027上线", "2028划线", "2028上线"])
+    ws.append(["特控分段", "", "", "", ""])
+    ws.append(["语数英综合", "", "", 270, 500])
+    ws.append(["物理", "", "", 65, 300])
+    ws.append(["浙大分段", "", "", "", ""])
+    ws.append(["语数英综合", "", "", 300, 150])
+    ws.append(["物理", "", "", 85, 50])
+
+    result = parse_upgrade_sheet(ws)
+
+    # 验证分数线
+    assert result["语数英综合"]["special"] == 270
+    assert result["语数英综合"]["zd"] == 300
+    assert result["物理"]["special"] == 65
+    assert result["物理"]["zd"] == 85
+
+    # 验证上线人数
+    assert result["语数英综合"]["special_rank"] == 500
+    assert result["语数英综合"]["zd_rank"] == 150
+    assert result["物理"]["special_rank"] == 300
+    assert result["物理"]["zd_rank"] == 50
+
+
+def test_compute_subject_equivalents_invalid_raw():
+    """P2: 语数英原始分无法转为 float 时不应 NameError"""
+    from calc_equivalent import compute_subject_equivalents
+    data = {
+        "total_score": 650,
+        "_total_equivalent": 600,
+        "subjects": [
+            {"name": "语文", "raw": "缺考"},  # 非数值
+            {"name": "数学", "raw": 120},
+            {"name": "英语", "raw": 110},
+            {"name": "物理", "assigned": 88},
+        ],
+    }
+    # 不应抛出 NameError，语文应返回 score=None
+    results = compute_subject_equivalents(data, {})
+    chinese = [r for r in results if r["subject"] == "语文"]
+    assert len(chinese) == 1
+    assert chinese[0]["score"] is None
+    assert chinese[0]["confidence"] == "D"

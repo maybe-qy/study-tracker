@@ -40,7 +40,6 @@ ALL_SUBJECTS = MAIN_SUBJECTS + ELECTIVE_SUBJECTS
 TREND_SLOPE_THRESHOLD = 1.5     # 斜率绝对值超过此值判定为上升/下降
 VOLATILITY_SIGMA_MULT = 1.5     # 浮动区间 = 均值 ± mult × σ
 EWMA_ALPHA = 0.3                # EWMA 平滑系数（趋势分析）
-EWMA_ALPHA_PERSONAL = 0.6       # EWMA 平滑系数（个人档案时间加权）
 PREDICTION_THRESHOLD = 3        # 预测标签阈值（±3分）
 MIN_DATA_FOR_ANALYSIS = 4       # 趋势/波动分析最少数据点
 MIN_DATA_FOR_FUSION = 2         # 多方法融合最少方法数
@@ -54,5 +53,5 @@ DATA_CONSISTENCY_RATIO = 0.10  # 总人数差异超过10%告警
 
 # ── 满分制 ──
 FULL_SCORE = 750
-MAIN_FULL_SCORE = 450  # 语数英满分
+MAIN_FULL_SCORE = 450  # 语数英三科合计满分（150×3）
 SUB_FULL_SCORE = 100   # 单科满分

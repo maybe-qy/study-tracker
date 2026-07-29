@@ -24,13 +24,21 @@ from jinja2 import Environment, FileSystemLoader
 from excel_utils import read_sheet_dicts, read_macro_data
 from config import *  # noqa: F401,F403 — 统一导入 CONFIDENCE_WEIGHTS / EWMA_ALPHA / TREND_SLOPE_THRESHOLD 等常量
 
+
+def safe_float(val, default=None):
+    """安全转换为 float，失败时返回 default。"""
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return default
+
 DISCLAIMER = """声明与局限性
 
 1. 等效分方法：
    优先使用双模块换算法（各科校内划线独立换算），或分数线对照法（省级特控线固定锚点）。
    校内排名对照法（有本校高考对照表时）为 A 级。
    全市/联盟排名锚定法作为交叉验证。
-   校排名估算在仅有校内排名无对照表时使用，C 级。
+   校排名估算为 C 级（低精度回退），仅C级可用时返回insufficient_data。
    等效分仅供参考，不构成对高考成绩的预测。
 
 2. 置信度分级：
@@ -53,30 +61,55 @@ def load_data(workspace):
 
     def sort_by_date(records, reverse=False):
         """按日期排序，默认升序（最旧的在前，便于趋势分析）"""
+        from datetime import datetime as _dt
         def parse_date(d):
             if not d or not isinstance(d, str):
-                return ""
-            return d.strip()
+                return _dt.min
+            d = d.strip()
+            # 尝试多种日期格式，补零标准化
+            for fmt in ("%Y-%m-%d", "%Y-%m", "%Y/%m/%d", "%Y/%m"):
+                try:
+                    return _dt.strptime(d, fmt)
+                except ValueError:
+                    continue
+            # 尝试补零: "2026-1-5" → "2026-01-05"
+            try:
+                parts = d.replace("/", "-").split("-")
+                if len(parts) >= 2:
+                    parts = [p.zfill(2) if len(p) < 2 else p for p in parts]
+                    return _dt.strptime("-".join(parts), "%Y-%m-%d")
+            except ValueError:
+                pass
+            return _dt.min
         return sorted(records, key=lambda r: parse_date(r.get("日期", "")), reverse=reverse)
 
     # 成绩总表
     path = os.path.join(workspace, "data", "personal", "成绩总表.xlsx")
     if os.path.exists(path):
         wb = load_workbook(path, data_only=True)
-        data["exams"] = sort_by_date(read_sheet_dicts(wb["成绩总表"]))
+        try:
+            data["exams"] = sort_by_date(read_sheet_dicts(wb["成绩总表"]))
+        finally:
+            wb.close()
 
     # 等效分记录
     path = os.path.join(workspace, "data", "personal", "等效分记录.xlsx")
     if os.path.exists(path):
         wb = load_workbook(path, data_only=True)
-        data["equivalent"] = sort_by_date(read_sheet_dicts(wb["等效分记录"]))
+        try:
+            data["equivalent"] = sort_by_date(read_sheet_dicts(wb["等效分记录"]))
+        finally:
+            wb.close()
 
     # 单科追踪
     path = os.path.join(workspace, "data", "personal", "单科追踪.xlsx")
     if os.path.exists(path):
         wb = load_workbook(path, data_only=True)
-        for name in wb.sheetnames:
-            data["subjects"][name] = sort_by_date(read_sheet_dicts(wb[name]))
+        try:
+            for name in wb.sheetnames:
+                data["subjects"][name] = sort_by_date(read_sheet_dicts(wb[name]))
+        finally:
+            wb.close()
 
     # 宏观数据
     macro_data = read_macro_data(workspace)
@@ -87,8 +120,11 @@ def load_data(workspace):
     data["admission"] = {}
     if os.path.exists(path):
         wb = load_workbook(path, data_only=True)
-        for name in wb.sheetnames:
-            data["admission"][name] = read_sheet_dicts(wb[name])
+        try:
+            for name in wb.sheetnames:
+                data["admission"][name] = read_sheet_dicts(wb[name])
+        finally:
+            wb.close()
 
     return data
 
@@ -149,9 +185,11 @@ def filter_weighted(records):
         conf = str(r.get("置信度", "A")).strip()
         weight = CONFIDENCE_WEIGHTS.get(conf, 1.0)
         if weight > 0:
-            score = float(r.get("等效分（融合结果）", 0) or 0)
-            if score > 0:
-                weighted.append((score, weight))
+            score_val = r.get("等效分（融合结果）")
+            if score_val is not None and score_val != "":
+                score = safe_float(score_val, 0)
+                if score is not None:
+                    weighted.append((score, weight))
     return weighted
 
 
@@ -291,6 +329,82 @@ def _find_logo_base64(target_university, logo_dir=None):
 
 # ─── Report generators ─────────────────────────────────────────────────
 
+def _compute_tier_info(macro, score, target_university, target_line, target_gap):
+    """Compute university tier information for the personal report.
+
+    Extracts tier matching logic from render_personal() for readability.
+    Returns tier_info dict or None.
+    """
+    tier_info = None
+    tier_data = macro.get("院校层次", [])
+    if tier_data and score > 0:
+        current_tier = None
+        next_tier = None
+        all_tiers = []
+
+        for row in tier_data:
+            scope = str(row.get("范围", ""))
+            name = str(row.get("梯队", ""))
+            threshold_str = str(row.get("预估总分门槛", "0"))
+            upper_str = str(row.get("预估总分上限", "750"))
+            try:
+                threshold = float(threshold_str)
+                upper = float(upper_str) if upper_str else FULL_SCORE
+            except (ValueError, TypeError):
+                continue
+
+            tier_entry = {
+                "scope": scope,
+                "name": name,
+                "threshold": threshold,
+                "upper": upper,
+                "schools": str(row.get("代表院校", "")),
+                "is_current": False,
+            }
+
+            if threshold <= score <= upper:
+                tier_entry["is_current"] = True
+                current_tier = tier_entry
+
+            all_tiers.append(tier_entry)
+
+        if current_tier:
+            above = [t for t in all_tiers if t["threshold"] > current_tier["upper"]]
+            above.sort(key=lambda t: t["threshold"])
+            if above:
+                next_tier = above[0]
+            elif [t for t in all_tiers if t["threshold"] > score]:
+                candidates = [t for t in all_tiers if t["threshold"] > score]
+                candidates.sort(key=lambda t: t["threshold"])
+                next_tier = candidates[0]
+
+        tier_info = {
+            "current": current_tier,
+            "next": next_tier,
+            "next_gap": round(next_tier["threshold"] - score, 0) if next_tier else None,
+            "all_tiers": all_tiers,
+            "target_university": target_university,
+            "target_line": target_line,
+            "target_gap": target_gap,
+            "target_logo": _find_logo_base64(target_university),
+        }
+
+    # 无院校层次参考但有目标院校时，构建最小 tier_info
+    if tier_info is None and target_university:
+        tier_info = {
+            "current": None,
+            "next": None,
+            "next_gap": None,
+            "all_tiers": [],
+            "target_university": target_university,
+            "target_line": target_line,
+            "target_gap": target_gap,
+            "target_logo": _find_logo_base64(target_university),
+        }
+
+    return tier_info
+
+
 def render_personal(data, env):
     """Render 个人档案.html."""
     eq_records = data["equivalent"]
@@ -320,15 +434,14 @@ def render_personal(data, env):
             volatility_upper="-",
             sigma="-",
             subject_scores=[],
-            hierarchy_refs=None,
             tier_info=None,
             volatility_style="-",
             disclaimer=DISCLAIMER,
         )
 
     latest = eq_records[-1]
-    latest_equiv = float(latest.get("等效分（融合结果）", 0)) if latest.get("等效分（融合结果）") is not None else None
-    eq_scores = [float(r.get("等效分（融合结果）", 0) or 0) for r in eq_records if r.get("等效分（融合结果）")]
+    latest_equiv = safe_float(latest.get("等效分（融合结果）")) if latest.get("等效分（融合结果）") is not None else None
+    eq_scores = [safe_float(r.get("等效分（融合结果）", 0), 0) for r in eq_records if r.get("等效分（融合结果）") is not None and r.get("等效分（融合结果）") != ""]
     weighted = filter_weighted(eq_records)
 
     trend_class, trend_arrow, trend_text = compute_trend(eq_scores)
@@ -352,75 +465,7 @@ def render_personal(data, env):
         except (ValueError, TypeError):
             target_gap = None
 
-    tier_info = None
-    tier_data = macro.get("院校层次", [])
-    if tier_data and score > 0:
-        current_tier = None
-        next_tier = None
-        all_tiers = []
-
-        for row in tier_data:
-            scope = str(row.get("范围", ""))
-            name = str(row.get("梯队", ""))
-            threshold_str = str(row.get("预估总分门槛", "0"))
-            upper_str = str(row.get("预估总分上限", "750"))
-            try:
-                threshold = float(threshold_str)
-                upper = float(upper_str) if upper_str else FULL_SCORE
-            except (ValueError, TypeError):
-                continue
-
-            tier_entry = {
-                "scope": scope,
-                "name": name,
-                "threshold": threshold,
-                "upper": upper,
-                "schools": str(row.get("代表院校", "")),
-                "is_current": False,
-            }
-
-            # Check if student is in this tier
-            if threshold <= score <= upper:
-                tier_entry["is_current"] = True
-                current_tier = tier_entry
-
-            all_tiers.append(tier_entry)
-
-        # Find next tier up
-        if current_tier:
-            above = [t for t in all_tiers if t["threshold"] > current_tier["upper"]]
-            above.sort(key=lambda t: t["threshold"])
-            if above:
-                next_tier = above[0]
-            elif [t for t in all_tiers if t["threshold"] > score]:
-                # Student between tiers
-                candidates = [t for t in all_tiers if t["threshold"] > score]
-                candidates.sort(key=lambda t: t["threshold"])
-                next_tier = candidates[0]
-
-        tier_info = {
-            "current": current_tier,
-            "next": next_tier,
-            "next_gap": round(next_tier["threshold"] - score, 0) if next_tier else None,
-            "all_tiers": all_tiers,
-            "target_university": target_university,
-            "target_line": target_line,
-            "target_gap": target_gap,
-            "target_logo": _find_logo_base64(target_university),
-        }
-
-    # 无院校层次参考但有目标院校时，构建最小 tier_info
-    if tier_info is None and target_university:
-        tier_info = {
-            "current": None,
-            "next": None,
-            "next_gap": None,
-            "all_tiers": [],
-            "target_university": target_university,
-            "target_line": target_line,
-            "target_gap": target_gap,
-            "target_logo": _find_logo_base64(target_university),
-        }
+    tier_info = _compute_tier_info(macro, score, target_university, target_line, target_gap)
 
     # Extract calculation detail from latest record
     latest_calc_detail = ""
@@ -524,7 +569,7 @@ def render_trend(data, env):
     # 显示时反转为降序（最新的在最上面，方便查看近期趋势）
     exams = list(reversed(exams))
 
-    eq_scores = [float(r["等效分（融合结果）"]) for r in eq_records if r.get("等效分（融合结果）")]
+    eq_scores = [safe_float(r["等效分（融合结果）"], 0) for r in eq_records if r.get("等效分（融合结果）") is not None and r.get("等效分（融合结果）") != ""]
     weighted = filter_weighted(eq_records)
     trend_class, trend_arrow, trend_text = compute_trend(eq_scores)
     sigma, vol_low, vol_high = compute_volatility_weighted(weighted)
@@ -541,7 +586,7 @@ def render_trend(data, env):
             cv_score = r.get(f"交叉验证分{cv_num}")
             if cv_method and cv_score:
                 diff = None
-                primary = float(r.get("等效分（融合结果）", 0)) if r.get("等效分（融合结果）") else None
+                primary = safe_float(r.get("等效分（融合结果）", 0)) if r.get("等效分（融合结果）") else None
                 try:
                     cv_score_f = float(cv_score)
                 except (ValueError, TypeError):
@@ -573,6 +618,36 @@ def render_trend(data, env):
         cross_validations=cross_validations,
         disclaimer=DISCLAIMER,
     )
+
+
+def _build_subject_record(date, exam, raw, assigned, confidence, subject_name):
+    """Build a single subject tracking record dict from raw/assigned scores.
+
+    Shared by 单科追踪 fallback and 成绩总表 fallback in render_subject().
+    For 语数英: always uses raw score. For 选科: uses assigned if available.
+    """
+    is_main = subject_name in ("语文", "数学", "英语")
+    use_assigned = assigned is not None and assigned != "" and not is_main
+
+    if use_assigned:
+        score_float = float(assigned)
+        score_str = f"{score_float:.1f}"
+    elif raw is not None and raw != "":
+        score_float = float(raw)
+        score_str = f"{score_float:.1f}"
+    else:
+        score_float = None
+        score_str = "-"
+
+    return {
+        "date": date or "-",
+        "exam": exam or "-",
+        "raw": raw if raw is not None and raw != "" else "-",
+        "assigned": assigned if assigned is not None and assigned != "" else "-",
+        "score": score_str,
+        "confidence": confidence or "-",
+        "method": "-",
+    }, score_float
 
 
 def render_subject(data, env, subject_name, sheet_name):
@@ -611,17 +686,13 @@ def render_subject(data, env, subject_name, sheet_name):
             for r in subject_data:
                 raw = r.get("原始分")
                 assigned = r.get("赋分")
-                if assigned is not None and assigned != "" and subject_name not in ("语文", "数学", "英语"):
-                    scores.append(float(assigned))
-                else:
-                    scores.append(float(raw) if raw is not None and raw != "" else None)
-                records.append({
-                    "date": r.get("日期", "-"),
-                    "exam": r.get("考试名", "-"),
-                    "raw": raw if raw is not None and raw != "" else "-",
-                    "assigned": assigned if assigned is not None and assigned != "" else "-",
-                    "confidence": r.get("赋分置信度") or "-",
-                })
+                rec, score_float = _build_subject_record(
+                    r.get("日期"), r.get("考试名"), raw, assigned,
+                    r.get("赋分置信度"), subject_name,
+                )
+                records.append(rec)
+                if score_float is not None:
+                    scores.append(score_float)
         else:
             for exam in data.get("exams", []):
                 raw = None
@@ -639,17 +710,13 @@ def render_subject(data, env, subject_name, sheet_name):
                             break
                 if raw is None or raw == "":
                     continue
-                if assigned is not None and assigned != "" and subject_name not in ("语文", "数学", "英语"):
-                    scores.append(float(assigned))
-                else:
-                    scores.append(float(raw))
-                records.append({
-                    "date": exam.get("日期", "-"),
-                    "exam": exam.get("考试名", "-"),
-                    "raw": raw if raw is not None and raw != "" else "-",
-                    "assigned": assigned if assigned is not None and assigned != "" else "-",
-                    "confidence": conf if conf else "-",
-                })
+                rec, score_float = _build_subject_record(
+                    exam.get("日期"), exam.get("考试名"), raw, assigned,
+                    conf, subject_name,
+                )
+                records.append(rec)
+                if score_float is not None:
+                    scores.append(score_float)
 
     valid_scores = [s for s in scores if s is not None]
     if not valid_scores:
