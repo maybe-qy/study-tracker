@@ -2,8 +2,11 @@
 """Record one exam: append to 成绩总表.xlsx and create immutable .md archive.
 
 Usage:
+  # JSON file input (豆包 office task mode / standalone):
+  python record_exam.py --json-file data.json
+
+  # Stdin input (pipe-based, backward compatible):
   echo '{"workspace": "...", "exam_name": "...", ...}' | python record_exam.py
-  python record_exam.py --workspace "d:/研究/学升" < data.json
 
 Input JSON fields (required):
   workspace, exam_name, exam_date, exam_type, grade, total_score
@@ -19,6 +22,7 @@ Input JSON fields (optional):
 
 import json
 import os
+import argparse
 import sys
 
 from openpyxl import load_workbook
@@ -347,11 +351,26 @@ def run(data):
 
 
 def main():
-    try:
-        data = json.loads(sys.stdin.read())
-    except json.JSONDecodeError as e:
-        print(json.dumps({"status": "error", "reason": f"JSON 解析失败: {e}"}, ensure_ascii=False))
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description="Record one exam to 成绩总表.xlsx")
+    parser.add_argument("--json-file", default=None, help="Read JSON input from file instead of stdin")
+    args = parser.parse_args()
+
+    if args.json_file:
+        try:
+            with open(args.json_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except FileNotFoundError:
+            print(json.dumps({"status": "error", "reason": f"文件不存在: {args.json_file}"}, ensure_ascii=False))
+            sys.exit(1)
+        except json.JSONDecodeError as e:
+            print(json.dumps({"status": "error", "reason": f"JSON 解析失败: {e}"}, ensure_ascii=False))
+            sys.exit(1)
+    else:
+        try:
+            data = json.loads(sys.stdin.read())
+        except json.JSONDecodeError as e:
+            print(json.dumps({"status": "error", "reason": f"JSON 解析失败: {e}"}, ensure_ascii=False))
+            sys.exit(1)
 
     err = validate(data)
     if err:

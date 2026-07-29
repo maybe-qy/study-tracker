@@ -2,16 +2,16 @@
 """Save equivalent score calculation results to 等效分记录.xlsx.
 
 Usage:
-  python calc_equivalent.py < exam_data.json | python save_equivalent.py --workspace <path>
+  # JSON file input (豆包 office task mode / standalone):
+  python save_equivalent.py --json-file result.json --workspace <path> --exam-name "..." --exam-date "..."
 
-  Or combined:
-  echo '{"workspace":".", "exam_name":"...", ...}' | python calc_equivalent.py | \
-    python save_equivalent.py --workspace . --exam-name "..." --exam-date "..." --target "..." --target-line 652
+  # Stdin input (pipe-based, backward compatible):
+  python calc_equivalent.py < exam_data.json | python save_equivalent.py --workspace <path> --exam-name "..." --exam-date "..."
 
 Input JSON fields:
   workspace, exam_name, exam_date — required
   target_university, target_line — optional
-  Plus the calc_equivalent output via stdin.
+  Plus the calc_equivalent output via stdin or --json-file.
 """
 
 import argparse
@@ -141,6 +141,7 @@ def main():
     parser.add_argument("--exam-date", required=True)
     parser.add_argument("--target", default=None, help="Target university name")
     parser.add_argument("--target-line", default=None, help="Target university admission score")
+    parser.add_argument("--json-file", default=None, help="Read calc_equivalent result from file instead of stdin")
     args = parser.parse_args()
 
     # 手动转换 target-line，统一错误格式
@@ -152,11 +153,22 @@ def main():
             print(json.dumps({"status": "error", "reason": f"--target-line 值无效: {args.target_line}"}, ensure_ascii=False))
             sys.exit(1)
 
-    try:
-        calc_result = json.loads(sys.stdin.read())
-    except json.JSONDecodeError as e:
-        print(json.dumps({"status": "error", "reason": f"JSON 解析失败（请确认通过管道连接 calc_equivalent.py）: {e}"}, ensure_ascii=False))
-        sys.exit(1)
+    if args.json_file:
+        try:
+            with open(args.json_file, "r", encoding="utf-8") as f:
+                calc_result = json.load(f)
+        except FileNotFoundError:
+            print(json.dumps({"status": "error", "reason": f"文件不存在: {args.json_file}"}, ensure_ascii=False))
+            sys.exit(1)
+        except json.JSONDecodeError as e:
+            print(json.dumps({"status": "error", "reason": f"JSON 解析失败: {e}"}, ensure_ascii=False))
+            sys.exit(1)
+    else:
+        try:
+            calc_result = json.loads(sys.stdin.read())
+        except json.JSONDecodeError as e:
+            print(json.dumps({"status": "error", "reason": f"JSON 解析失败（请确认通过管道连接 calc_equivalent.py）: {e}"}, ensure_ascii=False))
+            sys.exit(1)
 
     if not isinstance(calc_result, dict):
         print(json.dumps({"status": "error", "reason": "calc_equivalent 输出格式异常（非JSON对象）"}, ensure_ascii=False))

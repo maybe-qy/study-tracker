@@ -16,10 +16,19 @@ All A/B-level methods participate in weighted fusion by confidence.
 C-level methods appear in cross-validations for transparency but are excluded from fusion.
 Weights (A=1.0, B=0.8, C=0.5, D=0).
 
-Input: JSON via stdin
+Input: JSON via stdin (or --json-file)
 Output: JSON with equivalent score, confidence, error range, cross-validations
+
+Usage:
+  # JSON file input (豆包 office task mode / standalone):
+  python calc_equivalent.py --json-file data.json
+  python calc_equivalent.py --json-file data.json --output result.json
+
+  # Stdin input (pipe-based, backward compatible):
+  echo '{"workspace":".", "total_score":580, ...}' | python calc_equivalent.py
 """
 
+import argparse
 import json
 import os
 import re
@@ -1513,12 +1522,47 @@ def run(data):
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Calculate equivalent Gaokao score")
+    parser.add_argument("--json-file", default=None, help="Read JSON input from file instead of stdin")
+    parser.add_argument("--output", "-o", default=None, help="Write result JSON to file instead of stdout")
+    args = parser.parse_args()
+
+    if args.json_file:
+        try:
+            with open(args.json_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except FileNotFoundError:
+            result = {"status": "error", "reason": f"文件不存在: {args.json_file}"}
+            _output_result(result, args.output)
+            sys.exit(1 if not args.output else 0)
+        except json.JSONDecodeError as e:
+            result = {"status": "error", "reason": f"JSON 解析失败: {e}"}
+            _output_result(result, args.output)
+            sys.exit(1 if not args.output else 0)
+    else:
+        try:
+            data = json.loads(sys.stdin.read())
+        except json.JSONDecodeError as e:
+            result = {"status": "error", "reason": f"JSON 解析失败: {e}"}
+            print(json.dumps(result, ensure_ascii=False, default=str))
+            sys.exit(1)
+
     try:
-        data = json.loads(sys.stdin.read())
         result = run(data)
     except Exception as e:
         result = {"status": "error", "reason": f"计算过程异常: {e}"}
-    print(json.dumps(result, ensure_ascii=False, default=str))
+
+    _output_result(result, args.output)
+
+
+def _output_result(result, output_path):
+    """Write result to file or stdout."""
+    json_str = json.dumps(result, ensure_ascii=False, default=str)
+    if output_path:
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(json_str)
+    else:
+        print(json_str)
 
 
 if __name__ == "__main__":

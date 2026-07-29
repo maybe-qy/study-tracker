@@ -148,12 +148,55 @@ python3 src/scripts/generate_reports.py --workspace .
 
 | 报告 | 说明 |
 |------|------|
-| `个人等效.html` | 最新等效分、状态判断、院校定位 |
+| `个人档案.html` | 最新等效分、状态判断、院校定位 |
 | `高考总分趋势.html` | 等效分时间序列、趋势方向、波动分析 |
 | `语文追踪.html` | 语文单科历史和动态赋分 |
 | `数学追踪.html` | 数学单科历史和动态赋分 |
-| `外语追踪.html` | 外语单科历史和动态赋分 |
+| `英语追踪.html` | 英语单科历史和动态赋分 |
 | `物理追踪.html` 等 | 选科单科追踪（按实际选科命名） |
+
+## 在豆包中使用
+
+豆包的 Python 沙箱不支持 shell 管道和 heredoc。提供两种替代方案：
+
+**方案一（推荐）：直接导入模块**
+
+```python
+import sys; sys.path.insert(0, "src/scripts")
+
+# 1. 初始化工作区（首次）
+from setup_workspace import run as setup; setup(".")
+
+# 2. 录入成绩
+from record_exam import run as record
+record({"workspace": ".", "exam_name": "10月月考", "exam_date": "2026-10-15",
+        "exam_type": "月考", "grade": "高二", "total_score": 580,
+        "cn_score": 105, "math_score": 110, "en_score": 115,
+        "sub1_name": "物理", "sub1_raw": 78, "sub1_assigned": 85,
+        "sub2_name": "化学", "sub2_raw": 72, "sub2_assigned": 88,
+        "sub3_name": "生物", "sub3_raw": 68, "sub3_assigned": 82,
+        "school_rank": 80, "school_total": 835, "special_line": 542.5})
+
+# 3. 计算等效分
+from calc_equivalent import run as calc
+eq = calc({"workspace": ".", "total_score": 580, "special_line_exam": 542.5})
+
+# 4. 保存等效分
+from save_equivalent import run as save_eq
+save_eq(".", "10月月考", "2026-10-15", eq)
+
+# 5. 生成报告
+from generate_reports import run as report; report(".")
+```
+
+**方案二：JSON 文件传参**
+
+```bash
+python src/scripts/record_exam.py --json-file exam_data.json
+python src/scripts/calc_equivalent.py --json-file calc_input.json --output eq_result.json
+python src/scripts/save_equivalent.py --json-file eq_result.json --workspace . --exam-name "10月月考" --exam-date "2026-10-15"
+python src/scripts/generate_reports.py --workspace .
+```
 
 ## 等效分计算方法
 

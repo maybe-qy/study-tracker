@@ -3,6 +3,10 @@
 > 本文件是给 AI 助手（豆包、ChatGPT、Claude 等）阅读的指令文档。
 > 用户发给你本文件内容或本文件路径后，你按照下面的流程操作。
 
+**豆包 Office Task 模式注意**：豆包 Python 沙箱不支持 shell 管道和 heredoc。在豆包中运行脚本时，使用两种替代方式：
+- **方案一（推荐）**：`from record_exam import run; run({...})` 直接导入模块调用
+- **方案二**：`python record_exam.py --json-file data.json` 通过文件传参（脚本支持 `--json-file` 和 `--output` 参数）
+
 ——
 
 **如果你是人类，不想看下面内容：** 复制下面这段话，在豆包 App 点「任务」标签（绿色沙漏）粘贴发送即可。豆包会自动部署项目并引导你录入成绩。
@@ -29,7 +33,7 @@ https://github.com/maybe-qy/study-tracker
 5. 等效分是估算值，不是高考预测，向用户说明这一点
 6. **绝对不给提分建议**：不分析科目强弱、不说"理科思维优势"、不建议"提升某科"、不推荐学习方法。只报告数据和等效分结果。
 7. 不推荐大学专业、不预测高考
-8. **地域限制**：目前仅支持浙江省高考。如果用户说其他省份，明确告知"目前仅支持浙江省，其他省份暂不支持"。
+8. **地域支持**：默认适配浙江省新高考（选考赋分制）。其他省份可通过替换宏观数据中的一分一段表和特控线来适配，但选考赋分逻辑需用户自行调整。如遇非浙江用户，告知可尝试适配但不保证精度。
 9. **选科说明**：浙江是7选3赋分制（物理/化学/生物/政治/历史/地理/技术中选3门），选科有赋分。语数英是原始分，无赋分。
 
 ## 核心逻辑：等效分需要什么数据
@@ -60,10 +64,21 @@ https://github.com/maybe-qy/study-tracker
 问用户三个问题（可以一次问完）：
 
 - "你是几年级？（高一/高二/高三）"
-- "哪个省高考？（目前仅支持浙江，其他省份暂不支持）"
+- "哪个省高考？（默认浙江，其他省份可尝试适配）"
 - "有没有目标大学？（没有可以不填）"
 
-如果用户说不是浙江，直接告知"目前仅支持浙江省高考，暂不支持其他省份。"，停止后续流程。
+如果用户说不是浙江，告知"默认适配浙江，其他省份可通过替换一分一段表和特控线来适配，但精度未经充分验证。是否继续？"，让用户决定。
+
+### 第 1.5 步：初始化工作区（仅首次）
+
+首次使用前，静默运行一次：
+
+```bash
+cd <项目目录>
+python3 src/scripts/setup_workspace.py --workspace .
+```
+
+这会创建 `data/` 目录结构和带表头的 Excel 文件。如果工作区已初始化，脚本会自动跳过已有数据的文件，不会覆盖。**不要告知用户这一步的细节，只在后台静默执行。**
 
 ### 第 2 步：录入成绩
 
@@ -106,9 +121,28 @@ https://github.com/maybe-qy/study-tracker
 
 你内部构造 JSON 并调用 `record_exam.py`，**不要让用户看到 JSON**：
 
+**管道方式（ChatGPT/Claude/终端）：**
+
 ```bash
 cd <项目目录>
 echo '{
+  "workspace": ".",
+  "exam_name": "11月期中",
+  ...
+}' | python3 src/scripts/record_exam.py
+```
+
+**文件方式（豆包沙箱）：**
+
+```bash
+python3 src/scripts/record_exam.py --json-file exam_data.json
+```
+
+<details>
+<summary>完整 JSON 字段参考（点击展开）</summary>
+
+```json
+{
   "workspace": ".",
   "exam_name": "11月期中",
   "exam_date": "2026-11",
@@ -120,17 +154,13 @@ echo '{
   "cn_score": 102,
   "math_score": 128,
   "en_score": 110,
-  "sub1_name": "物理",
-  "sub1_raw": 70,
-  "sub1_assigned": 82,
-  "sub2_name": "化学",
-  "sub2_raw": 68,
-  "sub2_assigned": 79,
-  "sub3_name": "技术",
-  "sub3_raw": 88,
-  "sub3_assigned": 84
-}' | python3 src/scripts/record_exam.py
+  "sub1_name": "物理", "sub1_raw": 70, "sub1_assigned": 82,
+  "sub2_name": "化学", "sub2_raw": 68, "sub2_assigned": 79,
+  "sub3_name": "技术", "sub3_raw": 88, "sub3_assigned": 84
+}
 ```
+
+</details>
 
 字段说明：
 - `cn_score` = 语文原始分，`math_score` = 数学原始分，`en_score` = 英语原始分
@@ -154,25 +184,17 @@ echo '{
 
 **注意**：JSON 中需要包含 `subjects` 数组（从第3步录入数据中提取）和 `special_line`（用户提供的特控线，如未提供则省略）。
 
+**管道方式（ChatGPT/Claude/终端）：**
+
 ```bash
 cd <项目目录>
-echo '{
-  "workspace": ".",
-  "exam_name": "11月期中",
-  "exam_date": "2026-11",
-  "total_score": 576,
-  "school_rank": 150,
-  "school_total": 600,
-  "special_line": 542.5,
-  "subjects": [
-    {"name": "语文", "raw": 102},
-    {"name": "数学", "raw": 128},
-    {"name": "英语", "raw": 110},
-    {"name": "物理", "raw": 70, "assigned": 82},
-    {"name": "化学", "raw": 68, "assigned": 79},
-    {"name": "技术", "raw": 88, "assigned": 84}
-  ]
-}' | python3 src/scripts/calc_equivalent.py
+echo '{"workspace":".", ...}' | python3 src/scripts/calc_equivalent.py
+```
+
+**文件方式（豆包沙箱）：**
+
+```bash
+python3 src/scripts/calc_equivalent.py --json-file calc_input.json --output eq_result.json
 ```
 
 **必须执行这一步，不要跳过**。处理结果：
@@ -187,7 +209,9 @@ echo '{
 
 ### 第 5 步：保存等效分
 
-**必须通过管道连接第4步的输出**，save_equivalent.py 从 stdin 读取计算结果：
+将第4步的计算结果传给 `save_equivalent.py`。在支持管道的环境中，直接通过管道传递；在豆包等不支持管道的环境中，使用 `--json-file` 传参或 Python import 方式：
+
+**管道方式（ChatGPT/Claude/终端）：**
 
 ```bash
 cd <项目目录>
@@ -195,6 +219,13 @@ echo '{...第4步的JSON...}' | python3 src/scripts/calc_equivalent.py | python3
   --workspace . \
   --exam-name "11月期中" \
   --exam-date "2026-11"
+```
+
+**文件方式（豆包沙箱）：**
+
+```bash
+python3 src/scripts/calc_equivalent.py --json-file calc_input.json --output eq_result.json
+python3 src/scripts/save_equivalent.py --json-file eq_result.json --workspace . --exam-name "11月期中" --exam-date "2026-11"
 ```
 
 ### 第 6 步：生成报告（输出HTML文件，不是应用）
