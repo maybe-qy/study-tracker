@@ -144,26 +144,24 @@ python3 src/scripts/calc_equivalent.py < exam_data.json | python3 src/scripts/sa
 python3 src/scripts/generate_reports.py --workspace .
 ```
 
-生成 8 份 HTML 报告到 `output/` 目录：
+生成 HTML 报告到 `output/` 目录：
 
 | 报告 | 说明 |
 |------|------|
-| `个人档案.html` | 最新等效分、状态判断、院校定位 |
+| `个人等效.html` | 最新等效分、状态判断、院校定位 |
 | `高考总分趋势.html` | 等效分时间序列、趋势方向、波动分析 |
 | `语文追踪.html` | 语文单科历史和动态赋分 |
 | `数学追踪.html` | 数学单科历史和动态赋分 |
-| `英语追踪.html` | 英语单科历史和动态赋分 |
-| `选科追踪.html` | 选科单科历史和动态赋分（按实际选科命名，如「物理追踪.html」） |
+| `外语追踪.html` | 外语单科历史和动态赋分 |
+| `物理追踪.html` 等 | 选科单科追踪（按实际选科命名） |
 
 ## 等效分计算方法
 
-8 种方法按需自动选择，加权融合（A=1.0 / B=0.8 / C=0.5 / D=0）。
+7 种有效方法按需自动选择，加权融合（A=1.0 / B=0.8）。v4.0 起 C 级方法弃用，仅 C 级时返回 insufficient_data。
 
 - **A 级**（±5 分）：分数线对照法、校内排名对照法、单科排名对照法、排名锚定法
 - **A/B 级**（±5-10 分）：双模块换算法
 - **B 级**（±10 分）：人数校准法、校排阈值估算法
-- **C 级**（±15 分）：校排名估算
-- **D 级**（±20 分）：数据不足，仅供参考
 
 ## 目录结构
 
@@ -171,12 +169,15 @@ python3 src/scripts/generate_reports.py --workspace .
 study-tracker/
 ├── src/
 │   ├── scripts/
+│   │   ├── config.py               # 集中配置常量
 │   │   ├── setup_workspace.py      # 工作区初始化
 │   │   ├── record_exam.py          # 成绩录入
-│   │   ├── calc_equivalent.py      # 等效分计算（8种方法）
+│   │   ├── calc_equivalent.py      # 等效分计算（7种方法）
 │   │   ├── save_equivalent.py      # 等效分保存
-│   │   └── generate_reports.py     # HTML报告生成
+│   │   ├── generate_reports.py     # HTML报告生成
+│   │   └── excel_utils.py          # Excel读写工具函数
 │   └── assets/
+│       ├── logos/                  # 大学校徽SVG（~95所）
 │       ├── report_personal.html    # 个人档案模板
 │       ├── report_trend.html       # 趋势报告模板
 │       └── report_subject.html     # 单科追踪模板
