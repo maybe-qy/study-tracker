@@ -89,7 +89,7 @@ def compute_main_raw_sum(data):
     """计算语数英原始分总和；若不足三科则按比例折算。
 
     优先使用 subjects 中的语数英原始分；若三科不全，则按总分比例
-    折算到 450 分制（语数英满分）。
+    折算到语数英满分制。
 
     Returns:
         语数英等效原始分总和（float）。
@@ -108,9 +108,9 @@ def compute_main_raw_sum(data):
         return main_raw_sum
     else:
         student_score = float(data.get("_original_total_score", data.get("total_score", 0)))
-        score_scale = data.get("score_scale", 750)
-        if score_scale == 750:
-            return student_score * 450 / 750
+        score_scale = int(data.get("score_scale", FULL_SCORE) or FULL_SCORE)
+        if score_scale == FULL_SCORE:
+            return student_score * MAIN_FULL_SCORE / FULL_SCORE
         else:
             return student_score
 
@@ -150,7 +150,10 @@ def method_score_line(data, macro):
     latest_year = -1
     for sl in special_lines:
         if sl.get("特控线分数"):
-            year = int(sl.get("年份", 0))
+            try:
+                year = int(sl.get("年份", 0))
+            except (ValueError, TypeError):
+                continue
             if year > latest_year:
                 latest_year = year
                 gaokao_sl = float(sl["特控线分数"])
@@ -159,23 +162,23 @@ def method_score_line(data, macro):
         return None
 
     total_score = float(data["total_score"])
-    if total_score == 750:
+    if total_score == FULL_SCORE:
         return {
             "method": "分数线对照法",
-            "score": 750.0,
+            "score": float(FULL_SCORE),
             "confidence": "A",
-            "detail": f"满分750 → 等效分750",
+            "detail": f"满分{FULL_SCORE} → 等效分{FULL_SCORE}",
         }
 
-    if float(special_line_exam) >= 750:
+    if float(special_line_exam) >= FULL_SCORE:
         return None
 
-    es = (750 - gaokao_sl) / (750 - special_line_exam) * (total_score - special_line_exam) + gaokao_sl
+    es = (FULL_SCORE - gaokao_sl) / (FULL_SCORE - special_line_exam) * (total_score - special_line_exam) + gaokao_sl
     return {
         "method": "分数线对照法",
         "score": round(es, 1),
         "confidence": "A",
-        "detail": f"等效分 = (750-{gaokao_sl})/(750-{special_line_exam})×({total_score}-{special_line_exam})+{gaokao_sl} = {es:.1f}",
+        "detail": f"等效分 = ({FULL_SCORE}-{gaokao_sl})/({FULL_SCORE}-{special_line_exam})×({total_score}-{special_line_exam})+{gaokao_sl} = {es:.1f}",
     }
 
 
@@ -227,8 +230,12 @@ def method_school_lookup(data, macro):
         # Linear interpolation
         for i in range(len(ranks) - 1):
             if ranks[i] <= calibrated_rank <= ranks[i + 1]:
-                ratio = (calibrated_rank - ranks[i]) / (ranks[i + 1] - ranks[i])
-                score = scores[i] + ratio * (scores[i + 1] - scores[i])
+                denom = ranks[i + 1] - ranks[i]
+                if denom == 0:
+                    score = scores[i]
+                else:
+                    ratio = (calibrated_rank - ranks[i]) / denom
+                    score = scores[i] + ratio * (scores[i + 1] - scores[i])
                 break
         else:
             return None
@@ -312,7 +319,7 @@ def method_school_estimate(data, macro):
         return None
 
     # 学校类型系数
-    school_type = data.get("school_type", "")
+    school_type = data.get("school_type", "普通")
     coeff = SCHOOL_TYPE_COEFF.get(school_type, 1.0)
 
     estimated_city_rank = int(int(school_rank) / int(school_total) * max_count * coeff)
@@ -385,7 +392,10 @@ def method_population_calibration(data, macro):
     latest_year = -1
     gaokao_line = None
     for sl in special_lines:
-        year = int(sl.get("年份", 0))
+        try:
+            year = int(sl.get("年份", 0))
+        except (ValueError, TypeError):
+            continue
         if year > latest_year:
             latest_year = year
             gaokao_line = float(sl["特控线分数"])
@@ -514,9 +524,12 @@ def method_two_module(data, macro):
     sch_special = main_data["special"]
     sch_zd = main_data.get("zd")
 
-    if sch_zd and sch_zd != sch_special and student_main >= sch_special:
+    if sch_zd is not None and sch_zd != sch_special and student_main >= sch_special:
         # Clamp ratio to [0, 1] for linear interpolation between special and ZJU
-        ratio = (student_main - sch_special) / (sch_zd - sch_special)
+        denom = sch_zd - sch_special
+        if denom == 0:
+            return None  # 特控线=浙大线，数据异常
+        ratio = (student_main - sch_special) / denom
         ratio_clamped = min(max(ratio, 0.0), 1.0)
         main_eq = GK_MAIN_SPECIAL + (GK_MAIN_ZD - GK_MAIN_SPECIAL) * ratio_clamped
         conf = "A"
@@ -524,7 +537,7 @@ def method_two_module(data, macro):
         # Diminishing returns for excess above ZJU line
         if student_main > sch_zd:
             excess = student_main - sch_zd
-            per_point = (GK_MAIN_ZD - GK_MAIN_SPECIAL) / (sch_zd - sch_special)
+            per_point = (GK_MAIN_ZD - GK_MAIN_SPECIAL) / denom
             bonus = excess * DAMPING * per_point
             main_eq = min(main_eq + bonus, MAIN_MAX)
             detail = (f"语数英{student_main:.0f}分, 校特控{sch_special:.0f}/浙大{sch_zd:.0f}"
@@ -532,7 +545,7 @@ def method_two_module(data, macro):
         else:
             detail = (f"语数英{student_main:.0f}分, 校特控{sch_special:.0f}/浙大{sch_zd:.0f}"
                       f" → 线上{ratio:.1%} → 等效{main_eq:.1f}")
-    elif student_main >= sch_special:
+    elif student_main >= sch_special and sch_special > 0:
         # Only special line available — single-point scaling
         ratio = student_main / sch_special
         ratio_clamped = min(ratio, 1.0)
@@ -572,15 +585,16 @@ def method_two_module(data, macro):
         raw = float(raw)
         sub_cut = cutoffs.get(name, {})
 
-        if sub_cut.get("special") and sub_cut.get("zd") and sub_cut["zd"] != sub_cut["special"] and raw >= sub_cut["special"]:
+        if sub_cut.get("special") and sub_cut.get("zd") and sub_cut["zd"] != sub_cut["special"] and raw >= sub_cut["special"] and sub_cut["special"] > 0:
             # Priority 1: dual-line — clamp ratio to [0,1], diminishing returns above ZJU
-            ratio = (raw - sub_cut["special"]) / (sub_cut["zd"] - sub_cut["special"])
+            sub_denom = sub_cut["zd"] - sub_cut["special"]
+            ratio = (raw - sub_cut["special"]) / sub_denom
             ratio_clamped = min(max(ratio, 0.0), 1.0)
             sub_eq = GK_SUB_SPECIAL + (GK_SUB_ZD - GK_SUB_SPECIAL) * ratio_clamped
             conf = "A"
             if raw > sub_cut["zd"]:
                 excess = raw - sub_cut["zd"]
-                per_point = (GK_SUB_ZD - GK_SUB_SPECIAL) / (sub_cut["zd"] - sub_cut["special"])
+                per_point = (GK_SUB_ZD - GK_SUB_SPECIAL) / sub_denom
                 bonus = excess * DAMPING * per_point
                 sub_eq = min(sub_eq + bonus, SUB_MAX)
                 detail = (f"{name}{raw:.0f}分, 校特控{sub_cut['special']:.0f}/浙大{sub_cut['zd']:.0f}"
@@ -588,7 +602,7 @@ def method_two_module(data, macro):
             else:
                 detail = (f"{name}{raw:.0f}分, 校特控{sub_cut['special']:.0f}/浙大{sub_cut['zd']:.0f}"
                           f" → 线上{ratio:.1%} → 等效{sub_eq:.1f}")
-        elif sub_cut.get("special") and raw >= sub_cut["special"]:
+        elif sub_cut.get("special") and raw >= sub_cut["special"] and sub_cut["special"] > 0:
             # Priority 2: single-line — clamp ratio, diminishing returns above special
             ratio = raw / sub_cut["special"]
             ratio_clamped = min(ratio, 1.0)
@@ -614,23 +628,26 @@ def method_two_module(data, macro):
         else:
             # Priority 3: no school cutoff → try existing single-subject fallbacks
             assigned = subj.get("assigned")
-            if assigned:
+            if assigned is not None and assigned != "":
                 sub_eq = float(assigned)
-                conf = subj.get("confidence", "B")
+                # 归一化置信度：去除"级"后缀，非ABCD值默认为B
+                conf = str(subj.get("confidence", "B")).replace("级", "").strip().upper()
+                if conf not in conf_counts:
+                    conf = "B"
                 detail = f"{name}赋分{assigned}（{conf}级）→ 等效{sub_eq:.0f}分"
             else:
                 # Try cross-exam fallback
                 prev = _find_previous_subject_data(workspace, name, data.get("exam_name", ""))
                 if prev:
                     n = prev.get("exams_skipped", 1)
-                    discount = round(0.85 ** n, 3)
+                    discount = round(CROSS_EXAM_DISCOUNT ** n, 3)
                     sub_eq = round(prev["score"] * discount, 1)
                     conf = "C"
                     detail = (f"{name}无校内划线, 回退至{prev['exam']}"
                               f"（{prev['score']}分×{discount:.2f}={sub_eq}分, C级）")
                 else:
                     # Use school对照表 or rough estimate
-                    sub_eq = round(GK_SUB_SPECIAL * raw / 100, 1) if raw else None
+                    sub_eq = round(GK_SUB_SPECIAL * raw / SUB_FULL_SCORE, 1) if raw is not None else None
                     conf = "D"
                     detail = f"{name}无任何参照数据 → 粗略估算{sub_eq}分(D级)"
             if sub_eq is None:
@@ -678,18 +695,30 @@ def method_school_threshold(data, macro):
     if ws is None:
         return None
 
-    # Parse with positional access (sheet has title + section header rows)
+    # Parse with section tracking (same as method_two_module)
     # Data rows: col0=科目, col1=2027划线, col2=2027上线, col3=2028划线, col4=2028上线
     te_line = None
     te_rank = None
     zd_line = None
     zd_rank = None
+    current_section = None  # "special" or "zd"
 
     for row in ws.iter_rows(min_row=1, values_only=True):
-        if not row or len(row) < 5:
+        if not row:
             continue
-        subj = str(row[0]).strip() if row[0] else ""
-        if "语数英" not in subj:
+        text_0 = str(row[0]).strip() if row[0] else ""
+
+        if "特控" in text_0 and "分段" in text_0:
+            current_section = "special"
+            continue
+        if "浙大" in text_0 and "分段" in text_0:
+            current_section = "zd"
+            continue
+        if current_section is None or len(row) < 5:
+            continue
+
+        subj = text_0
+        if "语数英" not in subj or subj == "科目":
             continue
         try:
             line_2028 = float(row[3]) if row[3] is not None else None
@@ -699,9 +728,9 @@ def method_school_threshold(data, macro):
         if line_2028 is None or count_2028 is None:
             continue
 
-        if te_line is None:
+        if current_section == "special":
             te_line, te_rank = line_2028, count_2028
-        else:
+        elif current_section == "zd":
             zd_line, zd_rank = line_2028, count_2028
 
     wb.close()
@@ -712,14 +741,18 @@ def method_school_threshold(data, macro):
     # Use actual 语数英 raw score sum from subjects; fall back to proportional
     student_450 = compute_main_raw_sum(data)
 
-    if te_line >= zd_line:
-        return None  # 特控线应低于浙大线，数据异常
+    if te_line is not None and zd_line is not None:
+        if te_line >= zd_line:
+            return None  # 特控线应低于浙大线，数据异常
 
-    if not (te_line <= student_450 <= zd_line):
-        return None
+        if not (te_line <= student_450 <= zd_line):
+            return None
 
-    ratio = (student_450 - te_line) / (zd_line - te_line)
-    estimated_rank = int(te_rank - ratio * (te_rank - zd_rank))
+        denom = zd_line - te_line
+        if denom == 0:
+            return None  # 除零保护
+        ratio = (student_450 - te_line) / denom
+        estimated_rank = int(te_rank - ratio * (te_rank - zd_rank))
 
     # Get school total: prefer input data, then try macro sheets
     school_total = data.get("school_total")
@@ -740,7 +773,7 @@ def method_school_threshold(data, macro):
     if not school_total:
         return None  # 无法估算，缺少学校总人数
 
-    school_type = data.get("school_type", "省重点")
+    school_type = data.get("school_type", "普通")
     coeff = SCHOOL_TYPE_COEFF.get(school_type, 1.0)
 
     score_table = filter_score_table(macro.get("一分一段表", []))
@@ -799,9 +832,13 @@ def method_school_subject_lookup(data, macro):
         else:
             for i in range(len(ranks) - 1):
                 if ranks[i] <= subj_rank <= ranks[i + 1]:
-                    ratio = (subj_rank - ranks[i]) / (ranks[i + 1] - ranks[i])
-                    eq_score = rank_map[ranks[i]] + ratio * (rank_map[ranks[i + 1]] - rank_map[ranks[i]])
-                    eq_score = round(eq_score, 1)
+                    denom = ranks[i + 1] - ranks[i]
+                    if denom == 0:
+                        eq_score = rank_map[ranks[i]]
+                    else:
+                        ratio = (subj_rank - ranks[i]) / denom
+                        eq_score = rank_map[ranks[i]] + ratio * (rank_map[ranks[i + 1]] - rank_map[ranks[i]])
+                        eq_score = round(eq_score, 1)
                     break
             else:
                 continue
@@ -901,13 +938,17 @@ def compute_subject_equivalents(data, macro):
         confidence = subj.get("confidence", "B")
 
         if name in MAIN_SUBJECTS:
-            if raw:
+            if raw is not None and raw != "":
                 sum_main_raw += float(raw)
             continue
 
         # 赋分直映
-        if assigned:
+        if assigned is not None and assigned != "":
             score = float(assigned)
+            # 归一化置信度
+            confidence = str(subj.get("confidence", "B")).replace("级", "").strip().upper()
+            if confidence not in ("A", "B", "C", "D"):
+                confidence = "B"
             results.append({
                 "subject": name, "score": score, "confidence": confidence,
                 "method": "赋分直映法",
@@ -920,7 +961,7 @@ def compute_subject_equivalents(data, macro):
         prev = _find_previous_subject_data(workspace, name, exam_name)
         if prev:
             n = prev.get("exams_skipped", 1)
-            discount = round(0.85 ** n, 3)
+            discount = round(CROSS_EXAM_DISCOUNT ** n, 3)
             score = round(prev["score"] * discount, 1)
             discount_pct = f"{discount:.2f}"
             results.append({
@@ -990,6 +1031,7 @@ def _find_previous_subject_data(workspace, subject_name, current_exam_name):
     if not os.path.exists(path):
         return None
 
+    wb = None
     try:
         wb = load_workbook(path, data_only=True)
         ws = wb["成绩总表"]
@@ -1001,34 +1043,39 @@ def _find_previous_subject_data(workspace, subject_name, current_exam_name):
         for i, row in enumerate(rows):
             d = dict(zip(headers, row))
             exam_name = str(d.get("考试名", ""))
-            # Always skip the first row (most recent = current exam, already recorded).
-            # Also skip any row matching current_exam_name (handles same-date edge cases).
+            # Skip current exam: either first row or matching name
             if i == 0:
                 exams_skipped = 0
                 continue
             if current_exam_name and (current_exam_name in exam_name or exam_name in current_exam_name):
-                exams_skipped = 0  # reset counter after passing the current exam
+                exams_skipped = 0
                 continue
 
             # Check if this exam has data for this subject
             if subject_name in MAIN_SUBJECTS:
                 score = d.get(subject_name)
-                if score:
+                if score is not None and score != "":
                     return {"exam": exam_name, "score": float(score), "field": subject_name, "exams_skipped": exams_skipped}
             else:
                 for j in range(1, 4):
                     subj_name = str(d.get(f"选科{j}名称", ""))
                     if subj_name == subject_name:
                         assigned = d.get(f"选科{j}赋分")
-                        if assigned:  # 优先赋分
+                        if assigned is not None and assigned != "":  # 优先赋分
                             return {"exam": exam_name, "score": float(assigned), "field": f"选科{j}赋分", "exams_skipped": exams_skipped}
                         raw = d.get(f"选科{j}原始分")
-                        if raw:
+                        if raw is not None and raw != "":
                             return {"exam": exam_name, "score": float(raw), "field": f"选科{j}原始分", "exams_skipped": exams_skipped}
             exams_skipped += 1
     except (KeyError, ValueError, TypeError, IOError):
         # 数据损坏或格式异常时静默回退，不影响主流程
         return None
+    finally:
+        if wb is not None:
+            try:
+                wb.close()
+            except Exception:
+                pass
     return None
 
 
@@ -1072,14 +1119,14 @@ def compute_independent_subject_sum(data, macro):
         return None
 
     sl_exam = float(special_line_exam)
-    if sl_exam >= 750:
+    if sl_exam >= FULL_SCORE:
         return None
 
     # 分数线对照法 applied to total, then allocate 语数英 portion
-    if total_score >= 750:
-        total_via_sl = 750.0
+    if total_score >= FULL_SCORE:
+        total_via_sl = float(FULL_SCORE)
     else:
-        total_via_sl = (750 - gaokao_sl) / (750 - sl_exam) * (total_score - sl_exam) + gaokao_sl
+        total_via_sl = (FULL_SCORE - gaokao_sl) / (FULL_SCORE - sl_exam) * (total_score - sl_exam) + gaokao_sl
 
     original_total = data.get("_original_total_score", total_score)
     main_ratio = main_raw / original_total if original_total else 0
@@ -1099,7 +1146,7 @@ def compute_independent_subject_sum(data, macro):
         if name in MAIN_SUBJECTS:
             continue
         assigned = subj.get("assigned")
-        if assigned:
+        if assigned is not None and assigned != "":
             subject_sum += float(assigned)
             confidences.append("B")
 
@@ -1107,7 +1154,7 @@ def compute_independent_subject_sum(data, macro):
         return None
 
     subject_sum = round(subject_sum, 1)
-    if subject_sum > 750:
+    if subject_sum > FULL_SCORE:
         return None  # 超满分上限，不参与融合
 
     return {"sum": subject_sum, "confidences": confidences}
@@ -1117,15 +1164,15 @@ def run(data):
     workspace = os.path.abspath(data.get("workspace", "."))
 
     # 满分制换算：450分制 → 750分制
-    score_scale = data.get("score_scale", 750)
+    score_scale = int(data.get("score_scale", FULL_SCORE) or FULL_SCORE)
     original_total_score = float(data["total_score"])  # 保存原始制总分，供单科比例计算使用
-    if score_scale == 450:
+    if score_scale == MAIN_FULL_SCORE:
         data = dict(data)
         data["_original_total_score"] = original_total_score
-        data["total_score"] = original_total_score * 750 / 450
+        data["total_score"] = original_total_score * FULL_SCORE / MAIN_FULL_SCORE
         if data.get("special_line_exam") or data.get("special_line"):
             sl = data.get("special_line_exam") or data.get("special_line")
-            data["special_line_exam"] = float(sl) * 750 / 450
+            data["special_line_exam"] = float(sl) * FULL_SCORE / MAIN_FULL_SCORE
 
     macro = read_macro_data(workspace)
 
@@ -1229,10 +1276,10 @@ def run(data):
     if len(methods) >= 2:
         scores = [m["score"] for m in methods]
         max_diff = max(scores) - min(scores)
-        if max_diff <= 3:
+        if max_diff <= DIVERGENCE_LOW:
             trust_note = "交叉验证一致，等效分可信度较高"
             divergence = "low"
-        elif max_diff <= 5:
+        elif max_diff <= DIVERGENCE_MEDIUM:
             trust_note = f"方法间存在分歧（最大差异{max_diff:.0f}分），以{primary['method']}为准"
             divergence = "medium"
         else:
@@ -1251,7 +1298,7 @@ def run(data):
             max_count = max(int(r.get("累计人数", 0)) for r in score_table)
             if max_count > 0 and user_total > 0:
                 ratio = abs(user_total - max_count) / max(max_count, user_total)
-                if ratio > 0.10:
+                if ratio > DATA_CONSISTENCY_RATIO:
                     warnings.append(
                         f"考试总人数({user_total})与一分一段表基数({max_count})差异{ratio:.0%}，"
                         "等效分可能存在偏差"
@@ -1271,17 +1318,17 @@ def run(data):
     components = []  # [(score, weight, label), ...]
     for m in methods:
         w = CONFIDENCE_WEIGHTS.get(m["confidence"], 0)
-        if w > 0:
+        if w > 0 and m["confidence"] in ("A", "B"):
             components.append((m["score"], w, m["method"]))
 
     if independent_subj:
         subj_confs = independent_subj["confidences"]
         subj_weights = [CONFIDENCE_WEIGHTS.get(c, 0) for c in subj_confs]
-        w_subject = (sum(subj_weights) / len(subj_weights) * 0.5) if subj_weights else 0
+        w_subject = (sum(subj_weights) / len(subj_weights) * SUBJECT_SUM_DECAY) if subj_weights else 0
         if w_subject > 0:
             components.append((independent_subj["sum"], w_subject, "单科加总"))
 
-    if len(components) >= 2:
+    if len(components) >= MIN_DATA_FOR_FUSION:
         weighted_sum = sum(s * w for s, w, _ in components)
         total_weight = sum(w for _, w, _ in components)
         fused = round(weighted_sum / total_weight, 1)
@@ -1319,8 +1366,11 @@ def run(data):
 
 
 def main():
-    data = json.loads(sys.stdin.read())
-    result = run(data)
+    try:
+        data = json.loads(sys.stdin.read())
+        result = run(data)
+    except Exception as e:
+        result = {"status": "error", "reason": f"计算过程异常: {e}"}
     print(json.dumps(result, ensure_ascii=False, default=str))
 
 

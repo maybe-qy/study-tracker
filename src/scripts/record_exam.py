@@ -86,7 +86,7 @@ MD_TEMPLATE = """# {exam_name}
 
 
 def validate(data):
-    missing = [f for f in REQUIRED if f not in data or data[f] is None]
+    missing = [f for f in REQUIRED if f not in data or data[f] is None or (isinstance(data[f], str) and not data[f].strip())]
     if missing:
         return f"缺少必填字段: {', '.join(missing)}"
     return None
@@ -137,15 +137,21 @@ def create_md(workspace, data):
     """Write immutable markdown record to 个体数据/."""
     # Calculate sum check: 语数英原始分 + 选科赋分（有赋分用赋分，没有用原始分）
     # 450分制考试总分仅含语数英，不包含选科
-    score_scale = data.get("score_scale", 750)
-    comparison_sum = (data.get("cn_score") or 0) + (data.get("math_score") or 0) + (data.get("en_score") or 0)
+    score_scale = int(data.get("score_scale", 750) or 750)
+    cn = data.get("cn_score")
+    math = data.get("math_score")
+    en = data.get("en_score")
+    comparison_sum = (float(cn) if cn is not None else 0) + (float(math) if math is not None else 0) + (float(en) if en is not None else 0)
     if score_scale != 450:
         for i in range(1, 4):
             assigned = data.get(f"sub{i}_assigned")
-            raw = data.get(f"sub{i}_raw") or 0
-            comparison_sum += (assigned if assigned else raw)
+            raw = data.get(f"sub{i}_raw")
+            if assigned is not None and assigned != "":
+                comparison_sum += float(assigned)
+            elif raw is not None and raw != "":
+                comparison_sum += float(raw)
     total = data["total_score"]
-    if abs(comparison_sum - total) > 0.5:
+    if abs(comparison_sum - float(total)) > 0.5:
         check_note = f"各科加总（选科有赋分用赋分）= {comparison_sum}，≠ 总分 {total}（用户确认以总分为准）"
     else:
         check_note = f"各科加总 = {comparison_sum}，与总分一致"
@@ -156,34 +162,38 @@ def create_md(workspace, data):
     school_rank = data.get("school_rank") or "-"
     school_total = data.get("school_total") or "-"
 
+    def fmt(v):
+        """Format value for MD: 0 is valid, only None/empty shows as '-'."""
+        return str(v) if v is not None and v != "" else "-"
+
     content = MD_TEMPLATE.format(
         exam_name=data["exam_name"],
         exam_date=data["exam_date"],
         exam_type=data["exam_type"],
         grade=data["grade"],
-        cn_score=data.get("cn_score") or "-",
-        math_score=data.get("math_score") or "-",
-        en_score=data.get("en_score") or "-",
-        sub1_name=data.get("sub1_name") or "-",
-        sub1_raw=data.get("sub1_raw") or "-",
-        sub1_assigned=data.get("sub1_assigned") or "-",
-        sub1_confidence=data.get("sub1_confidence") or "-",
-        sub2_name=data.get("sub2_name") or "-",
-        sub2_raw=data.get("sub2_raw") or "-",
-        sub2_assigned=data.get("sub2_assigned") or "-",
-        sub2_confidence=data.get("sub2_confidence") or "-",
-        sub3_name=data.get("sub3_name") or "-",
-        sub3_raw=data.get("sub3_raw") or "-",
-        sub3_assigned=data.get("sub3_assigned") or "-",
-        sub3_confidence=data.get("sub3_confidence") or "-",
+        cn_score=fmt(data.get("cn_score")),
+        math_score=fmt(data.get("math_score")),
+        en_score=fmt(data.get("en_score")),
+        sub1_name=fmt(data.get("sub1_name")),
+        sub1_raw=fmt(data.get("sub1_raw")),
+        sub1_assigned=fmt(data.get("sub1_assigned")),
+        sub1_confidence=fmt(data.get("sub1_confidence")),
+        sub2_name=fmt(data.get("sub2_name")),
+        sub2_raw=fmt(data.get("sub2_raw")),
+        sub2_assigned=fmt(data.get("sub2_assigned")),
+        sub2_confidence=fmt(data.get("sub2_confidence")),
+        sub3_name=fmt(data.get("sub3_name")),
+        sub3_raw=fmt(data.get("sub3_raw")),
+        sub3_assigned=fmt(data.get("sub3_assigned")),
+        sub3_confidence=fmt(data.get("sub3_confidence")),
         total_score=total,
         check_note=check_note,
         city_alliance_rank=city_alliance_rank,
         city_alliance_total=city_alliance_total,
         school_rank=school_rank,
         school_total=school_total,
-        special_line=data.get("special_line") or "-",
-        excellent_line=data.get("excellent_line") or "-",
+        special_line=fmt(data.get("special_line")),
+        excellent_line=fmt(data.get("excellent_line")),
         notes=data.get("notes") or "",
     )
 
@@ -204,40 +214,48 @@ def update_subject_tracking(workspace, data):
     if not os.path.exists(tracking_path):
         return
 
-    wb = load_workbook(tracking_path)
+    wb = None
+    try:
+        wb = load_workbook(tracking_path)
 
-    # Map subject names to sheet names
-    subjects = [
-        ("语文追踪", "语文", data.get("cn_score"), None, "B"),
-        ("数学追踪", "数学", data.get("math_score"), None, "B"),
-        ("英语追踪", "英语", data.get("en_score"), None, "B"),
-    ]
+        # Map subject names to sheet names
+        subjects = [
+            ("语文追踪", "语文", data.get("cn_score"), None, "B"),
+            ("数学追踪", "数学", data.get("math_score"), None, "B"),
+            ("英语追踪", "英语", data.get("en_score"), None, "B"),
+        ]
 
-    # Determine 选科 names — use the same logic for consistency
-    for i in range(1, 4):
-        sub_name = data.get(f"sub{i}_name")
-        sub_raw = data.get(f"sub{i}_raw")
-        sub_assigned = data.get(f"sub{i}_assigned")
-        sub_conf = data.get(f"sub{i}_confidence") or "B"
-        sheet_name = f"选科{i}追踪"
-        subjects.append((sheet_name, sub_name, sub_raw, sub_assigned, sub_conf))
+        # Determine 选科 names — use the same logic for consistency
+        for i in range(1, 4):
+            sub_name = data.get(f"sub{i}_name")
+            sub_raw = data.get(f"sub{i}_raw")
+            sub_assigned = data.get(f"sub{i}_assigned")
+            sub_conf = data.get(f"sub{i}_confidence") or "B"
+            sheet_name = f"选科{i}追踪"
+            subjects.append((sheet_name, sub_name, sub_raw, sub_assigned, sub_conf))
 
-    for sheet_name, subject_name, raw_val, assigned_val, conf_val in subjects:
-        if raw_val is None or raw_val == "":
-            continue
-        if sheet_name not in wb.sheetnames:
-            continue
+        for sheet_name, subject_name, raw_val, assigned_val, conf_val in subjects:
+            if raw_val is None or raw_val == "":
+                continue
+            if sheet_name not in wb.sheetnames:
+                continue
 
-        ws = wb[sheet_name]
-        ws.append([
-            data.get("exam_name", ""),
-            data.get("exam_date", ""),
-            raw_val,
-            assigned_val if assigned_val else "",
-            conf_val if conf_val else "",
-        ])
+            ws = wb[sheet_name]
+            ws.append([
+                data.get("exam_name", ""),
+                data.get("exam_date", ""),
+                raw_val,
+                assigned_val if assigned_val is not None and assigned_val != "" else "",
+                conf_val if conf_val is not None and conf_val != "" else "",
+            ])
 
-    wb.save(tracking_path)
+        wb.save(tracking_path)
+    finally:
+        if wb is not None:
+            try:
+                wb.close()
+            except Exception:
+                pass
 
 
 def _check_duplicate(ws, exam_name, exam_date):
@@ -282,8 +300,10 @@ def run(data):
 
     row = build_row(data)
 
+    saved_max_row = None
     try:
         ws.append(row)
+        saved_max_row = ws.max_row
         wb.save(excel_path)
     except Exception as e:
         wb.close()
@@ -310,8 +330,8 @@ def run(data):
 
     result = {
         "status": "ok",
-        "row": ws.max_row,
-        "record_index": ws.max_row - 1,  # 第几条记录（排除表头行）
+        "row": saved_max_row,
+        "record_index": (saved_max_row - 1) if saved_max_row else 0,  # 第几条记录（排除表头行）
         "md_path": md_path,
     }
     if warnings:

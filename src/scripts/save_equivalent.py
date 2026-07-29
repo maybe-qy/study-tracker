@@ -37,12 +37,25 @@ def run(workspace, exam_name, exam_date, calc_result, target_university=None, ta
 
     ws = wb["等效分记录"]
 
+    # 重复录入检测：同一考试名+日期不重复写入
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        if not row or len(row) < 2:
+            continue
+        existing_name = str(row[0]).strip() if row[0] else ""
+        existing_date = str(row[1]).strip() if row[1] else ""
+        if existing_name == str(exam_name).strip() and existing_date == str(exam_date).strip():
+            wb.close()
+            return {
+                "status": "error",
+                "reason": f"已存在相同等效分记录（{exam_name} / {exam_date}），请勿重复保存",
+            }
+
     # Build cross-validation columns
     cv_method1 = ""
     cv_score1 = ""
     cv_method2 = ""
     cv_score2 = ""
-    cross = calc_result.get("cross_validations", [])
+    cross = calc_result.get("cross_validations") or []
     if len(cross) > 0:
         cv_method1 = cross[0].get("method", "")
         cv_score1 = cross[0].get("score", "")
@@ -53,10 +66,13 @@ def run(workspace, exam_name, exam_date, calc_result, target_university=None, ta
     gap = None
     eq_score = calc_result.get("equivalent_score")
     if target_line is not None and eq_score is not None:
-        gap = round(float(eq_score) - float(target_line), 1)
+        try:
+            gap = round(float(eq_score) - float(target_line), 1)
+        except (ValueError, TypeError):
+            gap = None
 
     # I5: 去掉置信度中的"级"后缀，存储纯 A/B/C/D
-    confidence = str(calc_result.get("confidence", "")).replace("级", "")
+    confidence = str(calc_result.get("confidence") or "").replace("级", "")
 
     # I6: 统一 calculation_detail 为字符串
     calc_detail = calc_result.get("calculation_detail", "")
@@ -74,28 +90,31 @@ def run(workspace, exam_name, exam_date, calc_result, target_university=None, ta
 
     extra_info = json.dumps({
         "subject_scores": subject_scores,
-        "warnings": calc_result.get("warnings", []),
+        "warnings": calc_result.get("warnings") or [],
         "trust_note": calc_result.get("trust_note"),
         "divergence": calc_result.get("divergence"),
         "calculation_detail": calc_detail,
+        "method_details": calc_result.get("method_details") or [],
     }, ensure_ascii=False)
 
+    saved_row = None
     try:
         ws.append([
             exam_name,
             exam_date,
-            calc_result.get("equivalent_score", ""),
+            calc_result.get("equivalent_score") if calc_result.get("equivalent_score") is not None else "",
             confidence,
-            calc_result.get("primary_method", ""),
+            calc_result.get("primary_method") or "",
             cv_method1, cv_score1,
             cv_method2, cv_score2,
-            calc_result.get("error_lower", ""),
-            calc_result.get("error_upper", ""),
+            calc_result.get("error_lower") if calc_result.get("error_lower") is not None else "",
+            calc_result.get("error_upper") if calc_result.get("error_upper") is not None else "",
             target_university or "",
             target_line if target_line is not None else "",
             gap if gap is not None else "",
             extra_info,
         ])
+        saved_row = ws.max_row
         wb.save(path)
     except Exception as e:
         wb.close()
@@ -108,7 +127,7 @@ def run(workspace, exam_name, exam_date, calc_result, target_university=None, ta
 
     return {
         "status": "ok",
-        "row": ws.max_row,
+        "row": saved_row,
         "score": calc_result.get("equivalent_score"),
         "confidence": calc_result.get("confidence"),
         "method": calc_result.get("primary_method"),
@@ -130,6 +149,10 @@ def main():
         print(json.dumps({"status": "error", "reason": f"JSON 解析失败（请确认通过管道连接 calc_equivalent.py）: {e}"}, ensure_ascii=False))
         sys.exit(1)
 
+    if not isinstance(calc_result, dict):
+        print(json.dumps({"status": "error", "reason": "calc_equivalent 输出格式异常（非JSON对象）"}, ensure_ascii=False))
+        sys.exit(1)
+
     if calc_result.get("status") not in ("ok",):
         print(json.dumps({"status": "skipped", "reason": calc_result.get("reason", "unknown")}, ensure_ascii=False))
         sys.exit(0)
@@ -145,6 +168,9 @@ def main():
     except Exception as e:
         result = {"status": "error", "reason": f"未知错误: {e}"}
 
+    # 保存 max_row 到局部变量，避免 wb.close() 后访问
+    if "row" in result:
+        pass  # run() 已在 wb.close() 前获取
     print(json.dumps(result, ensure_ascii=False))
 
 

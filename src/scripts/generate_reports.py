@@ -252,27 +252,31 @@ def classify_volatility_style(labels, sigma, sequence):
         return None
     normal_ratio = labels["正常"] / total
     active_ratio = (labels["积极"] + labels["消极"]) / total
-    # 趋势型: 3+ consecutive same direction
+    # 趋势型: 3+ consecutive same direction (excluding "正常")
     max_consecutive = 1
     current_run = 1
     for i in range(1, len(sequence)):
-        if sequence[i] == sequence[i-1]:
+        if sequence[i] == sequence[i-1] and sequence[i] != "正常":
             current_run += 1
             max_consecutive = max(max_consecutive, current_run)
         else:
             current_run = 1
     if max_consecutive >= 3:
         return "呈持续变化趋势"
-    if active_ratio >= 0.5 and max_consecutive < 3:
+    if active_ratio >= 0.5:
         return "分数波动较大"
     if normal_ratio >= 0.7:
         return "分数相对稳定"
     return "分数波动较大"
 
 
-def _find_logo_base64(target_university, logo_dir="src/assets/logos"):
+def _find_logo_base64(target_university, logo_dir=None):
     """Find university logo SVG and return as base64 data URI, or None if not found."""
-    if not target_university or not os.path.isdir(logo_dir):
+    if not target_university:
+        return None
+    if logo_dir is None:
+        logo_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "logos")
+    if not os.path.isdir(logo_dir):
         return None
     for fname in os.listdir(logo_dir):
         if target_university in fname and fname.endswith(".svg"):
@@ -325,11 +329,6 @@ def render_personal(data, env):
     latest = eq_records[-1]
     latest_equiv = float(latest.get("等效分（融合结果）", 0)) if latest.get("等效分（融合结果）") is not None else None
     eq_scores = [float(r.get("等效分（融合结果）", 0) or 0) for r in eq_records if r.get("等效分（融合结果）")]
-    # 时间加权等效分（EWMA，α=EWMA_ALPHA_PERSONAL=0.6，越近权重越高）
-    if len(eq_scores) >= 2:
-        ewma_score = round(ewma(eq_scores, alpha=EWMA_ALPHA_PERSONAL), 1)
-    else:
-        ewma_score = eq_scores[0] if eq_scores else 0
     weighted = filter_weighted(eq_records)
 
     trend_class, trend_arrow, trend_text = compute_trend(eq_scores)
@@ -348,7 +347,10 @@ def render_personal(data, env):
     # Auto-compute gap if not stored but we have both values
     score = latest_equiv if latest_equiv is not None else (eq_scores[-1] if eq_scores else 0)
     if target_gap is None and target_line is not None and score > 0:
-        target_gap = round(score - target_line, 1)
+        try:
+            target_gap = round(score - float(target_line), 1)
+        except (ValueError, TypeError):
+            target_gap = None
 
     tier_info = None
     tier_data = macro.get("院校层次", [])
@@ -364,7 +366,7 @@ def render_personal(data, env):
             upper_str = str(row.get("预估总分上限", "750"))
             try:
                 threshold = float(threshold_str)
-                upper = float(upper_str) if upper_str else 750
+                upper = float(upper_str) if upper_str else FULL_SCORE
             except (ValueError, TypeError):
                 continue
 
@@ -443,14 +445,13 @@ def render_personal(data, env):
         trend_arrow=trend_arrow,
         trend_text=trend_text,
         prediction_state=pred or "-",
-        volatility_lower=vol_low or "-",
-        volatility_upper=vol_high or "-",
-        sigma=f"{sigma}分" if sigma else "-",
+        volatility_lower=vol_low if vol_low is not None else "-",
+        volatility_upper=vol_high if vol_high is not None else "-",
+        sigma=f"{sigma}分" if sigma is not None else "-",
         volatility_style=volatility_style or "-",
         is_first_record=is_first_record,
         exam_count=len(eq_scores),
         subject_scores=latest_subject_scores,
-        hierarchy_refs=None,
         tier_info=tier_info,
         disclaimer=DISCLAIMER,
     )
@@ -511,6 +512,7 @@ def render_trend(data, env):
             "method": r.get("主计算方法", "-"),
             "calc_detail": calc_detail,
             "method_switch": False,  # will be set below
+            "prev_method": "",  # initialized for consistent dict structure
         })
 
     # I15: 检测方法切换，标记相邻两次考试方法不同的记录
@@ -540,7 +542,10 @@ def render_trend(data, env):
             if cv_method and cv_score:
                 diff = None
                 primary = float(r.get("等效分（融合结果）", 0)) if r.get("等效分（融合结果）") else None
-                cv_score_f = float(cv_score)
+                try:
+                    cv_score_f = float(cv_score)
+                except (ValueError, TypeError):
+                    continue
                 if primary:
                     diff = f"{cv_score_f - primary:+.1f}"
                 cross_validations.append({
@@ -553,14 +558,14 @@ def render_trend(data, env):
     template = env.get_template("report_trend.html")
     return template.render(
         generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
-        exams=exams,  # 已按日期升序排序
+        exams=exams,  # 已按日期降序排列（最新在前，便于查看）
         has_analysis=has_analysis,
         trend_class=trend_class,
         trend_arrow=trend_arrow,
         trend_text=trend_text,
-        sigma=f"{sigma}" if sigma else "-",
-        volatility_lower=vol_low or "-",
-        volatility_upper=vol_high or "-",
+        sigma=f"{sigma}" if sigma is not None else "-",
+        volatility_lower=vol_low if vol_low is not None else "-",
+        volatility_upper=vol_high if vol_high is not None else "-",
         labels={"positive": labels["积极"] if labels else "-", "normal": labels["正常"] if labels else "-", "negative": labels["消极"] if labels else "-"},
         volatility_style=volatility_style or "-",
         is_first_record=is_first_record,
@@ -589,7 +594,7 @@ def render_subject(data, env, subject_name, sheet_name):
                 if s.get("subject") != subject_name:
                     continue
                 score = s.get("score")
-                if score:
+                if score is not None:
                     scores.append(float(score))
                     records.append({
                         "date": eq.get("日期", "-"),

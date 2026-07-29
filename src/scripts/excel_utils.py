@@ -105,17 +105,23 @@ def find_sheet(sheets, keyword):
 
     Uses SHEET_KEY_MAP display name for matching when it differs from keyword
     to avoid false matches (e.g. '对照' matching '单科对照' instead of '本校对照表_总分').
+    Also excludes known false positives like '单科' sheets and '_录取线' suffix sheets.
     """
     display = SHEET_KEY_MAP.get(keyword, keyword)
-    # Prefer display_name match (more specific)
+    # Prefer exact match first
+    for name in sheets:
+        if name == display:
+            return name
+    # Then prefer display_name match (more specific), excluding false positives
     if display.lower() != keyword.lower():
         for name in sheets:
-            if display.lower() in name.lower():
+            nl = name.lower()
+            if display.lower() in nl and "单科" not in nl and "_录取线" not in nl:
                 return name
     # Fallback: sheets matching keyword but excluding known false positives
     for name in sheets:
         nl = name.lower()
-        if keyword.lower() in nl and "单科" not in nl:
+        if keyword.lower() in nl and "单科" not in nl and "_录取线" not in nl:
             return name
     return None
 
