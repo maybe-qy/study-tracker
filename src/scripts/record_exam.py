@@ -284,66 +284,66 @@ def run(data):
     if not os.path.exists(excel_path):
         return {"status": "error", "reason": "成绩总表.xlsx 不存在，请先运行 setup_workspace.py"}
 
+    wb = None
     try:
-        wb = load_workbook(excel_path)
-    except Exception as e:
-        return {"status": "error", "reason": f"成绩总表.xlsx 读取失败: {e}"}
-
-    if "成绩总表" not in wb.sheetnames:
-        wb.close()
-        return {"status": "error", "reason": "成绩总表.xlsx 中缺少「成绩总表」Sheet"}
-
-    ws = wb["成绩总表"]
-
-    # 重复录入检测
-    exam_name = data.get("exam_name", "")
-    exam_date = data.get("exam_date", "")
-    if _check_duplicate(ws, exam_name, exam_date):
-        wb.close()
-        return {
-            "status": "error",
-            "reason": f"已存在相同考试记录（{exam_name} / {exam_date}），请勿重复录入。如需修改请直接编辑 Excel 文件。",
-        }
-
-    row = build_row(data)
-
-    saved_max_row = None
-    try:
-        ws.append(row)
-        saved_max_row = ws.max_row
-        wb.save(excel_path)
-    except Exception as e:
-        wb.close()
-        return {"status": "error", "reason": f"成绩总表写入失败: {e}"}
-    finally:
         try:
-            wb.close()
-        except Exception:
-            pass
+            wb = load_workbook(excel_path)
+        except Exception as e:
+            return {"status": "error", "reason": f"成绩总表.xlsx 读取失败: {e}"}
 
-    # 更新单科追踪（失败不影响主流程，但会返回警告）
-    warnings = []
-    try:
-        update_subject_tracking(workspace, data)
-    except Exception as e:
-        warnings.append(f"单科追踪更新失败: {e}")
+        if "成绩总表" not in wb.sheetnames:
+            return {"status": "error", "reason": "成绩总表.xlsx 中缺少「成绩总表」Sheet"}
 
-    # 生成 MD 存档（失败不影响主流程，但会返回警告）
-    md_path = None
-    try:
-        md_path = create_md(workspace, data)
-    except Exception as e:
-        warnings.append(f"MD存档生成失败: {e}")
+        ws = wb["成绩总表"]
 
-    result = {
-        "status": "ok",
-        "row": saved_max_row,
-        "record_index": (saved_max_row - 1) if saved_max_row else 0,  # 第几条记录（排除表头行）
-        "md_path": md_path,
-    }
-    if warnings:
-        result["warnings"] = warnings
-    return result
+        # 重复录入检测
+        exam_name = data.get("exam_name", "")
+        exam_date = data.get("exam_date", "")
+        if _check_duplicate(ws, exam_name, exam_date):
+            return {
+                "status": "error",
+                "reason": f"已存在相同考试记录（{exam_name} / {exam_date}），请勿重复录入。如需修改请直接编辑 Excel 文件。",
+            }
+
+        row = build_row(data)
+
+        saved_max_row = None
+        try:
+            ws.append(row)
+            saved_max_row = ws.max_row
+            wb.save(excel_path)
+        except Exception as e:
+            return {"status": "error", "reason": f"成绩总表写入失败: {e}"}
+
+        # 更新单科追踪（失败不影响主流程，但会返回警告）
+        warnings = []
+        try:
+            update_subject_tracking(workspace, data)
+        except Exception as e:
+            warnings.append(f"单科追踪更新失败: {e}")
+
+        # 生成 MD 存档（失败不影响主流程，但会返回警告）
+        md_path = None
+        try:
+            md_path = create_md(workspace, data)
+        except Exception as e:
+            warnings.append(f"MD存档生成失败: {e}")
+
+        result = {
+            "status": "ok",
+            "row": saved_max_row,
+            "record_index": (saved_max_row - 1) if saved_max_row else 0,
+            "md_path": md_path,
+        }
+        if warnings:
+            result["warnings"] = warnings
+        return result
+    finally:
+        if wb is not None:
+            try:
+                wb.close()
+            except Exception:
+                pass
 
 
 def main():

@@ -89,8 +89,8 @@
       <tr>
         <td>{{ record.date }}</td>
         <td>{{ record.exam }}</td>
-        <td><strong>{{ record.score if record.score else record.assigned if record.assigned != '-' else record.raw }}</strong></td>
-        <td><span class="confidence confidence-{{ record.confidence }}">{{ record.confidence }}级</span></td>
+        <td><strong>{{ record.score if record.score != '-' else (record.assigned if record.assigned != '-' else record.raw) }}</strong></td>
+        <td><span class="confidence confidence-{{ record.confidence|default('B') }}">{{ record.confidence|default('B') }}级</span></td>
         <td style="font-size:11px;color:#94a3b8;">{{ record.method if record.method else '-' }}</td>
       </tr>
       {% endfor %}

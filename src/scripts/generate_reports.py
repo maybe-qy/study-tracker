@@ -26,7 +26,9 @@ from config import *  # noqa: F401,F403 — 统一导入 CONFIDENCE_WEIGHTS / EW
 
 
 def safe_float(val, default=None):
-    """安全转换为 float，失败时返回 default。"""
+    """安全转换为 float，失败时返回 default。排除 bool 类型。"""
+    if isinstance(val, bool):
+        return default
     try:
         return float(val)
     except (ValueError, TypeError):
@@ -88,7 +90,8 @@ def load_data(workspace):
     if os.path.exists(path):
         wb = load_workbook(path, data_only=True)
         try:
-            data["exams"] = sort_by_date(read_sheet_dicts(wb["成绩总表"]))
+            if "成绩总表" in wb.sheetnames:
+                data["exams"] = sort_by_date(read_sheet_dicts(wb["成绩总表"]))
         finally:
             wb.close()
 
@@ -97,7 +100,8 @@ def load_data(workspace):
     if os.path.exists(path):
         wb = load_workbook(path, data_only=True)
         try:
-            data["equivalent"] = sort_by_date(read_sheet_dicts(wb["等效分记录"]))
+            if "等效分记录" in wb.sheetnames:
+                data["equivalent"] = sort_by_date(read_sheet_dicts(wb["等效分记录"]))
         finally:
             wb.close()
 
@@ -137,8 +141,7 @@ def ewma(scores, alpha=EWMA_ALPHA):
     """指数加权移动平均（Exponentially Weighted Moving Average）。
 
     共享实现，消除 4 处重复：render_personal / prediction_state /
-    eval_labels / render_subject。alpha 默认取 config.EWMA_ALPHA=0.3，
-    个人档案时间加权传 EWMA_ALPHA_PERSONAL=0.6。
+    eval_labels / render_subject。alpha 默认取 config.EWMA_ALPHA=0.3。
     """
     if not scores:
         return 0
@@ -182,15 +185,27 @@ def filter_weighted(records):
     """Extract (score, weight) tuples from equivalent score records, excluding D-level."""
     weighted = []
     for r in records:
-        conf = str(r.get("置信度", "A")).strip()
+        conf = str(r.get("置信度", "A")).strip().replace("级", "").upper()
         weight = CONFIDENCE_WEIGHTS.get(conf, 1.0)
         if weight > 0:
             score_val = r.get("等效分（融合结果）")
             if score_val is not None and score_val != "":
-                score = safe_float(score_val, 0)
+                score = safe_float(score_val)
                 if score is not None:
                     weighted.append((score, weight))
     return weighted
+
+
+def extract_eq_scores(eq_records):
+    """从等效分记录中提取有效分数列表（排除 None/空/非数值）。"""
+    scores = []
+    for r in eq_records:
+        val = r.get("等效分（融合结果）")
+        if val is not None and val != "":
+            score = safe_float(val)
+            if score is not None:
+                scores.append(score)
+    return scores
 
 
 def compute_trend(scores):
@@ -323,7 +338,7 @@ def _find_logo_base64(target_university, logo_dir=None):
                 with open(fpath, "rb") as fh:
                     return "data:image/svg+xml;base64," + base64.b64encode(fh.read()).decode()
             except Exception:
-                return None
+                continue  # 跳过读取失败的文件，继续查找
     return None
 
 
@@ -440,8 +455,8 @@ def render_personal(data, env):
         )
 
     latest = eq_records[-1]
-    latest_equiv = safe_float(latest.get("等效分（融合结果）")) if latest.get("等效分（融合结果）") is not None else None
-    eq_scores = [safe_float(r.get("等效分（融合结果）", 0), 0) for r in eq_records if r.get("等效分（融合结果）") is not None and r.get("等效分（融合结果）") != ""]
+    latest_equiv = safe_float(latest.get("等效分（融合结果）"))
+    eq_scores = extract_eq_scores(eq_records)
     weighted = filter_weighted(eq_records)
 
     trend_class, trend_arrow, trend_text = compute_trend(eq_scores)
@@ -455,15 +470,12 @@ def render_personal(data, env):
     # ── 院校定位 ──
     # 目标院校始终从 latest 提取，不依赖院校层次参考数据
     target_university = latest.get("目标院校")
-    target_line = latest.get("目标院校录取线")
-    target_gap = latest.get("差距分数")
+    target_line = safe_float(latest.get("目标院校录取线"))
+    target_gap = safe_float(latest.get("差距分数"))
     # Auto-compute gap if not stored but we have both values
     score = latest_equiv if latest_equiv is not None else (eq_scores[-1] if eq_scores else 0)
     if target_gap is None and target_line is not None and score > 0:
-        try:
-            target_gap = round(score - float(target_line), 1)
-        except (ValueError, TypeError):
-            target_gap = None
+        target_gap = round(score - target_line, 1)
 
     tier_info = _compute_tier_info(macro, score, target_university, target_line, target_gap)
 
@@ -479,8 +491,8 @@ def render_personal(data, env):
     return template.render(
         generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
         equivalent_score=f"{latest_equiv:.0f} 分" if latest_equiv is not None else "暂无",
-        latest_equiv=latest_equiv or 0,
-        confidence=latest.get("置信度", "-"),
+        latest_equiv=latest_equiv if latest_equiv is not None else 0,
+        confidence=str(latest.get("置信度", "-")).replace("级", "").strip() or "-",
         method=latest.get("主计算方法", "-"),
         calc_detail=latest_calc_detail,
         error_lower=latest.get("误差区间下限", "-"),
@@ -553,7 +565,7 @@ def render_trend(data, env):
             "date": r.get("日期", "-"),
             "name": r.get("考试名", "-"),
             "score": r.get("等效分（融合结果）", "-"),
-            "confidence": r.get("置信度", "-"),
+            "confidence": str(r.get("置信度", "-")).replace("级", "").strip() or "-",
             "method": r.get("主计算方法", "-"),
             "calc_detail": calc_detail,
             "method_switch": False,  # will be set below
@@ -569,12 +581,12 @@ def render_trend(data, env):
     # 显示时反转为降序（最新的在最上面，方便查看近期趋势）
     exams = list(reversed(exams))
 
-    eq_scores = [safe_float(r["等效分（融合结果）"], 0) for r in eq_records if r.get("等效分（融合结果）") is not None and r.get("等效分（融合结果）") != ""]
+    eq_scores = extract_eq_scores(eq_records)
     weighted = filter_weighted(eq_records)
     trend_class, trend_arrow, trend_text = compute_trend(eq_scores)
     sigma, vol_low, vol_high = compute_volatility_weighted(weighted)
     has_analysis = len(eq_scores) >= MIN_DATA_FOR_ANALYSIS
-    is_first_record = len(exams) == 1
+    is_first_record = len(eq_scores) == 1
     labels, label_sequence = eval_labels(eq_scores) if len(eq_scores) >= MIN_DATA_FOR_ANALYSIS else (None, None)
     volatility_style = classify_volatility_style(labels, sigma, label_sequence) if has_analysis else None
 
@@ -586,12 +598,11 @@ def render_trend(data, env):
             cv_score = r.get(f"交叉验证分{cv_num}")
             if cv_method and cv_score:
                 diff = None
-                primary = safe_float(r.get("等效分（融合结果）", 0)) if r.get("等效分（融合结果）") else None
-                try:
-                    cv_score_f = float(cv_score)
-                except (ValueError, TypeError):
+                primary = safe_float(r.get("等效分（融合结果）"))
+                cv_score_f = safe_float(cv_score)
+                if cv_score_f is None:
                     continue
-                if primary:
+                if primary is not None:
                     diff = f"{cv_score_f - primary:+.1f}"
                 cross_validations.append({
                     "exam": r.get("考试名", "-"),
@@ -630,11 +641,11 @@ def _build_subject_record(date, exam, raw, assigned, confidence, subject_name):
     use_assigned = assigned is not None and assigned != "" and not is_main
 
     if use_assigned:
-        score_float = float(assigned)
-        score_str = f"{score_float:.1f}"
+        score_float = safe_float(assigned)
+        score_str = f"{score_float:.1f}" if score_float is not None else "-"
     elif raw is not None and raw != "":
-        score_float = float(raw)
-        score_str = f"{score_float:.1f}"
+        score_float = safe_float(raw)
+        score_str = f"{score_float:.1f}" if score_float is not None else "-"
     else:
         score_float = None
         score_str = "-"
@@ -670,11 +681,14 @@ def render_subject(data, env, subject_name, sheet_name):
                     continue
                 score = s.get("score")
                 if score is not None:
-                    scores.append(float(score))
+                    score_f = safe_float(score)
+                    if score_f is None:
+                        continue
+                    scores.append(score_f)
                     records.append({
                         "date": eq.get("日期", "-"),
                         "exam": eq.get("考试名", "-"),
-                        "score": f"{score:.1f}",
+                        "score": f"{score_f:.1f}",
                         "confidence": s.get("confidence", "-"),
                         "method": s.get("method", "-"),
                     })
@@ -766,9 +780,19 @@ def run(workspace):
 
     env = Environment(loader=FileSystemLoader(assets_dir))
     generated = []
+    errors = []
+
+    # 每个报告独立渲染，单个失败不影响其他报告
+    def _safe_render(render_fn, *args, **kwargs):
+        """安全渲染单个报告，异常时记录错误而非中断整个流程。"""
+        try:
+            return render_fn(*args, **kwargs)
+        except Exception as e:
+            errors.append(f"{render_fn.__name__}: {e}")
+            return None
 
     # 1. 个人档案
-    html = render_personal(data, env)
+    html = _safe_render(render_personal, data, env)
     if html:
         p = os.path.join(workspace, "output", "个人档案.html")
         with open(p, "w", encoding="utf-8") as f:
@@ -776,7 +800,7 @@ def run(workspace):
         generated.append(p)
 
     # 2. 高考总分趋势
-    html = render_trend(data, env)
+    html = _safe_render(render_trend, data, env)
     if html:
         p = os.path.join(workspace, "output", "高考总分趋势.html")
         with open(p, "w", encoding="utf-8") as f:
@@ -809,13 +833,17 @@ def run(workspace):
             subject_sheet_map["选科3追踪"] = str(sub3_name)
 
     for sheet_name, subject_name in subject_sheet_map.items():
-        html = render_subject(data, env, subject_name, sheet_name)
-        p = os.path.join(workspace, "output", f"{subject_name}追踪.html")
-        with open(p, "w", encoding="utf-8") as f:
-            f.write(html)
-        generated.append(p)
+        html = _safe_render(render_subject, data, env, subject_name, sheet_name)
+        if html:
+            p = os.path.join(workspace, "output", f"{subject_name}追踪.html")
+            with open(p, "w", encoding="utf-8") as f:
+                f.write(html)
+            generated.append(p)
 
-    return {"status": "ok", "files": generated}
+    result = {"status": "ok", "files": generated}
+    if errors:
+        result["warnings"] = errors
+    return result
 
 
 def main():
@@ -824,8 +852,8 @@ def main():
     args = parser.parse_args()
 
     workspace = os.path.abspath(args.workspace)
-    if not os.path.exists(workspace):
-        print(json.dumps({"status": "error", "reason": f"路径不存在: {workspace}"}))
+    if not os.path.isdir(workspace):
+        print(json.dumps({"status": "error", "reason": f"路径不是目录: {workspace}"}))
         sys.exit(1)
 
     result = run(workspace)

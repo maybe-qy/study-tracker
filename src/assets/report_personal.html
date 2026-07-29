@@ -58,7 +58,7 @@
       <div class="score-label">等效高考分</div>
       <div class="score-value">{{ equivalent_score }}</div>
       <div class="score-meta">
-        <span class="confidence confidence-{{ confidence }}">{{ confidence }}级置信度</span>
+        <span class="confidence confidence-{{ confidence|default('B') }}">{{ confidence }}级置信度</span>
         · {{ method }}
       </div>
       <div class="error-range">误差区间 [{{ error_lower }}, {{ error_upper }}]</div>
@@ -99,13 +99,13 @@
       <tbody>
         {% set ns = namespace(total=0) %}
         {% for s in subject_scores %}
-        {% if s.score %}
-        {% set ns.total = ns.total + s.score %}
+        {% if s.score is not none %}
+        {% set ns.total = ns.total + (s.score if s.score else 0) %}
         <tr>
           <td>{{ s.subject }}</td>
           <td><strong>{{ "%.1f"|format(s.score) }}</strong></td>
-          <td><span class="subj-conf subj-conf-{{ s.confidence }}">{{ s.confidence }}级</span></td>
-          <td style="font-size:11px;color:#94a3b8;">{{ s.method }}</td>
+          <td><span class="subj-conf subj-conf-{{ s.confidence|default('B') }}">{{ s.confidence|default('B') }}级</span></td>
+          <td style="font-size:11px;color:#94a3b8;">{{ s.method|default('-') }}</td>
         </tr>
         {% endif %}
         {% endfor %}

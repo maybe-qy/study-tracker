@@ -395,3 +395,101 @@ def test_compute_tier_info_target_only():
     assert result["target_gap"] == -2
     assert result["current"] is None
     assert result["all_tiers"] == []
+
+
+# ── P1: HTML 模板 score=0 修复测试 ──
+
+
+def test_build_subject_record_zero_score():
+    """P1: 选科赋分为 0 时应正确显示，不应被当作 falsy 跳过"""
+    from generate_reports import _build_subject_record
+    rec, score = _build_subject_record("2026-01", "期末", 0, 0, "A", "物理")
+    assert score == 0.0
+    assert rec["score"] == "0.0"  # 应显示 0.0，而非 "-"
+
+
+def test_personal_report_renders_zero_score(tmpdir):
+    """P1: 个人档案模板中 subject_scores 含 0 分时应正确渲染"""
+    from generate_reports import run as gen_reports
+    from jinja2 import Environment, FileSystemLoader
+    from datetime import datetime
+
+    assets_dir = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "src", "assets"
+    )
+    env = Environment(loader=FileSystemLoader(assets_dir))
+    template = env.get_template("report_personal.html")
+
+    # 渲染包含 0 分的 subject_scores
+    html = template.render(
+        generated_at="2026-01-01 00:00",
+        equivalent_score="600 分",
+        latest_equiv=600,
+        confidence="A",
+        method="分数线对照法",
+        calc_detail="测试",
+        error_lower=595,
+        error_upper=605,
+        has_analysis=False,
+        is_first_record=False,
+        exam_count=5,
+        trend_class="flat",
+        trend_arrow="→",
+        trend_text="持平",
+        prediction_state="-",
+        volatility_lower="-",
+        volatility_upper="-",
+        sigma="-",
+        subject_scores=[
+            {"subject": "语文", "score": 120, "confidence": "A", "method": "比例折算法"},
+            {"subject": "物理", "score": 0, "confidence": "B", "method": "赋分直映法"},  # 0 分
+            {"subject": "化学", "score": 85, "confidence": "A", "method": "赋分直映法"},
+        ],
+        tier_info=None,
+        volatility_style="-",
+        disclaimer="测试声明",
+    )
+
+    # 0 分科目应出现在 HTML 中
+    assert "物理" in html
+    assert "0.0" in html  # 0.0 分应被显示
+
+
+def test_subject_report_renders_dash_score_fallback(tmpdir):
+    """P1: 单科追踪模板中 score='-' 时应回退显示 assigned/raw"""
+    from jinja2 import Environment, FileSystemLoader
+
+    assets_dir = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "src", "assets"
+    )
+    env = Environment(loader=FileSystemLoader(assets_dir))
+    template = env.get_template("report_subject.html")
+
+    html = template.render(
+        subject="物理",
+        generated_at="2026-01-01 00:00",
+        dynamic_score=85,
+        latest=88,
+        highest=90,
+        trend_class="up",
+        trend_arrow="↑",
+        trend_text="上升",
+        is_first_record=False,
+        exam_count=3,
+        records=[
+            # score='-' 时应回退到 assigned
+            {"date": "2026-01", "exam": "期末", "score": "-",
+             "raw": 78, "assigned": 88, "confidence": "A", "method": "-"},
+            # score 有值时直接显示
+            {"date": "2025-12", "exam": "月考", "score": "85.0",
+             "raw": 75, "assigned": 85, "confidence": "A", "method": "赋分直映法"},
+        ],
+        disclaimer="测试声明",
+    )
+
+    # 第一条记录 score='-' 应回退显示 assigned=88
+    assert "88" in html
+    # 第二条记录 score='85.0' 应直接显示
+    assert "85.0" in html

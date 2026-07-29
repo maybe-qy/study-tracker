@@ -69,8 +69,8 @@
       <tr>
         <td>{{ exam.date }}</td>
         <td>{{ exam.name }}</td>
-        <td><strong class="score-{{ exam.confidence }}">{{ exam.score }}</strong></td>
-        <td><span class="confidence confidence-{{ exam.confidence }}">{{ exam.confidence }}级</span></td>
+        <td><strong class="score-{{ exam.confidence|default('B') }}">{{ exam.score }}</strong></td>
+        <td><span class="confidence confidence-{{ exam.confidence|default('B') }}">{{ exam.confidence|default('B') }}级</span></td>
         <td>{{ exam.method }}{% if exam.method_switch %} <span class="method-switch-badge" title="方法切换：从{{ exam.prev_method }}">⚠</span>{% endif %}</td>
         <td>
           {% if exam.calc_detail %}
@@ -114,7 +114,7 @@
     {% if has_analysis %}
     <div class="stat-row">
       <span class="stat-label">波动幅度 (σ)</span>
-      <span class="stat-value">{{ sigma }}分</span>
+      <span class="stat-value">{{ sigma }}{% if sigma != "-" %}分{% endif %}</span>
     </div>
     <div class="stat-row">
       <span class="stat-label">浮动区间</span>

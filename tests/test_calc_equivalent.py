@@ -546,7 +546,7 @@ def test_parse_upgrade_sheet_returns_rank_data():
 
 
 def test_compute_subject_equivalents_invalid_raw():
-    """P2: 语数英原始分无法转为 float 时不应 NameError"""
+    """P2: 语数英原始分无法转为 float 时不应 NameError，应按均分估算"""
     from calc_equivalent import compute_subject_equivalents
     data = {
         "total_score": 650,
@@ -558,9 +558,97 @@ def test_compute_subject_equivalents_invalid_raw():
             {"name": "物理", "assigned": 88},
         ],
     }
-    # 不应抛出 NameError，语文应返回 score=None
+    # 不应抛出 NameError，语文应有估算分数（均分估算法，C级）
     results = compute_subject_equivalents(data, {})
     chinese = [r for r in results if r["subject"] == "语文"]
     assert len(chinese) == 1
-    assert chinese[0]["score"] is None
-    assert chinese[0]["confidence"] == "D"
+    assert chinese[0]["score"] is not None  # 按均分估算
+    assert chinese[0]["confidence"] == "C"
+    assert chinese[0]["method"] == "均分估算法"
+    # 数学、英语应有有效分数
+    math = [r for r in results if r["subject"] == "数学"][0]
+    english = [r for r in results if r["subject"] == "英语"][0]
+    assert math["score"] is not None
+    assert english["score"] is not None
+
+
+# ── P0: workspace 未定义 bug 回归测试 ──
+
+
+def test_two_module_workspace_undefined_fallback(tmpdir):
+    """P0 回归: method_two_module 中选科无校内划线+无赋分时，
+    回退至 _find_previous_subject_data 不应因 workspace 未定义而 NameError。
+
+    重现条件：
+      1. 升级 Sheet 存在（触发 method_two_module）
+      2. 某选科在升级 Sheet 中无分数线（走 Priority 3 回退）
+      3. 该选科无赋分（走 _find_previous_subject_data 跨次回退）
+      4. 成绩总表中有历史数据可供回退
+    """
+    from calc_equivalent import method_two_module
+    from openpyxl import Workbook
+
+    workspace = str(tmpdir)
+    macro_dir = os.path.join(workspace, "data", "macro")
+    os.makedirs(macro_dir, exist_ok=True)
+
+    # 创建升级 Sheet（有语数英综合划线，但无物理划线）
+    wb = Workbook()
+    ws1 = wb.active
+    ws1.title = "期末升级"
+    ws1.append(["特控线分段"])
+    ws1.append(["科目", "2027划线", "2027上线", "2028划线", "2028上线"])
+    ws1.append(["语数英综合", "", "", 270, 500])
+    # 物理在升级 Sheet 中没有划线数据 → 触发 Priority 3 回退
+    ws1.append(["浙大线分段"])
+    ws1.append(["科目", "2027划线", "2027上线", "2028划线", "2028上线"])
+    ws1.append(["语数英综合", "", "", 300, 150])
+    wb.save(os.path.join(macro_dir, "宏观数据_只读.xlsx"))
+
+    # 创建成绩总表，含历史物理赋分数据
+    personal_dir = os.path.join(workspace, "data", "personal")
+    os.makedirs(personal_dir, exist_ok=True)
+    wb2 = Workbook()
+    ws2 = wb2.active
+    ws2.title = "成绩总表"
+    ws2.append(["考试名", "日期", "语文", "数学", "英语",
+                "选科1名称", "选科1原始分", "选科1赋分",
+                "选科2名称", "选科2原始分", "选科2赋分",
+                "选科3名称", "选科3原始分", "选科3赋分"])
+    ws2.append(["10月月考", "2026-10", 100, 120, 105,
+                "物理", 70, 82, "化学", 68, 79, "技术", 88, 84])
+    wb2.save(os.path.join(personal_dir, "成绩总表.xlsx"))
+
+    data = {
+        "workspace": workspace,
+        "exam_name": "期末",
+        "total_score": 570,
+        "subjects": [
+            {"name": "语文", "raw": 115},
+            {"name": "数学", "raw": 108},
+            {"name": "英语", "raw": 112},
+            # 物理无赋分，升级 Sheet 中也无物理划线 → 触发 _find_previous_subject_data
+            {"name": "物理", "raw": 80},
+        ],
+    }
+
+    # 修复前：NameError: name 'workspace' is not defined
+    # 修复后：应正常返回结果
+    result = method_two_module(data, {})
+    assert result is not None
+    assert result["method"] == "双模块换算法"
+    # 物理应通过跨次回退获得分数（C级）
+    assert "物理" in result["detail"]
+
+
+def test_normalize_confidence_various_inputs():
+    """P2: normalize_confidence 应正确处理各种输入格式"""
+    from calc_equivalent import normalize_confidence
+    assert normalize_confidence("A") == "A"
+    assert normalize_confidence("A级") == "A"
+    assert normalize_confidence("a") == "A"
+    assert normalize_confidence("B级") == "B"
+    assert normalize_confidence(None) == "B"
+    assert normalize_confidence("") == "B"
+    assert normalize_confidence("X") == "B"  # 未知值默认 B
+    assert normalize_confidence("D级") == "D"
