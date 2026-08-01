@@ -65,7 +65,7 @@ def read_sheet_dicts(ws, skip_title_row=True):
     Returns:
         List of dicts mapping header → cell value. Empty list if only headers.
     """
-    if ws.max_row < 2:
+    if (ws.max_row or 0) < 2:
         return []
     header_row_idx = 1
     if skip_title_row and ws.max_row >= 3:
@@ -136,7 +136,10 @@ def read_macro_data(workspace):
         path = os.path.join(workspace, "data", "macro", "宏观数据.xlsx")
     if not os.path.exists(path):
         return None
-    wb = load_workbook(path, data_only=True)
+    try:
+        wb = load_workbook(path, data_only=True)
+    except Exception:
+        return None
     try:
         data = {}
         # 先用模糊匹配定位关键 Sheet

@@ -35,17 +35,21 @@ def safe_float(val, default=None):
 
 DISCLAIMER = """声明与局限性
 
-1. 等效分方法：
-   优先使用双模块换算法（各科校内划线独立换算），或分数线对照法（省级特控线固定锚点）。
-   校内排名对照法（有本校高考对照表时）为 A 级。
-   全市/联盟排名锚定法作为交叉验证。
-   校排名估算为 C 级（低精度回退），仅C级可用时返回insufficient_data。
+1. 等效分方法（方法族架构）：
+   族① 校内划线换算（1A1B）：选科有独立划线时双模块完整换算（A级），
+      仅语数英划线时450→750等比例放大（B级）。
+   族② 外部参考映射（2A三选一）：分数线对照法（A级，优先），
+      排名锚定法（A级），校内排名对照法（A级）。
+   族③ 校内排名映射（二选一）：本校对照表（A级），年级排名映射（B级）。
+   方法④ 单科排名对照法（单科对照表，A级）。
    等效分仅供参考，不构成对高考成绩的预测。
 
 2. 置信度分级：
-   A级：双模块换算法（多数模块）、分数线对照法、校内排名对照法、单科排名对照法、全市/联盟排名锚定法、全市/联盟统一赋分。
-   B级：双模块换算法（部分模块）、主科原始分、全市统考/联盟考试中无独立划线的选科。
-   C级：校排名估算（无本校高考对照数据）。
+   A级：双模块换算法（多数模块）、分数线对照法、校内排名对照法、
+       单科排名对照法、全市/联盟排名锚定法、全市/联盟统一赋分。
+   B级：双模块换算法（部分模块）、主科原始分、450→750等比例放大、
+       全市统考/联盟考试中无独立划线的选科。
+   C级：校内排名映射（无本校高考对照数据）。
    D级：无排名无分数线分数。
    趋势/波动分析权重：A=1.0, B=0.8, C=0.5, D 不参与。
 
@@ -419,221 +423,10 @@ def _compute_tier_info(macro, score, target_university, target_line, target_gap)
     return tier_info
 
 
-def render_personal(data, env):
-    """Render 个人档案.html."""
-    eq_records = data["equivalent"]
-    macro = data.get("macro", {})
-
-    exam_records = data.get("exams", [])
-    if not eq_records:
-        has_exams = len(exam_records) >= 1
-        template = env.get_template("report_personal.html")
-        return template.render(
-            generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
-            equivalent_score="暂无数据" if not has_exams else "等待计算",
-            latest_equiv=0,
-            confidence="-",
-            method="-",
-            calc_detail="",
-            error_lower="-",
-            error_upper="-",
-            has_analysis=False,
-            is_first_record=False,  # 个人档案的首次引导仅在已有1条等效分时触发
-            exam_count=len(exam_records),
-            trend_class="flat",
-            trend_arrow="→",
-            trend_text="等待数据",
-            prediction_state="-",
-            volatility_lower="-",
-            volatility_upper="-",
-            sigma="-",
-            subject_scores=[],
-            tier_info=None,
-            volatility_style="-",
-            disclaimer=DISCLAIMER,
-        )
-
-    latest = eq_records[-1]
-    latest_equiv = safe_float(latest.get("等效分（融合结果）"))
-    eq_scores = extract_eq_scores(eq_records)
-    weighted = filter_weighted(eq_records)
-
-    trend_class, trend_arrow, trend_text = compute_trend(eq_scores)
-    sigma, vol_low, vol_high = compute_volatility_weighted(weighted)
-    pred = prediction_state(eq_scores)
-    has_analysis = len(eq_scores) >= MIN_DATA_FOR_ANALYSIS
-    is_first_record = len(eq_scores) == 1
-    labels, label_sequence = eval_labels(eq_scores) if len(eq_scores) >= MIN_DATA_FOR_ANALYSIS else (None, None)
-    volatility_style = classify_volatility_style(labels, sigma, label_sequence) if has_analysis else None
-
-    # ── 院校定位 ──
-    # 目标院校始终从 latest 提取，不依赖院校层次参考数据
-    target_university = latest.get("目标院校")
-    target_line = safe_float(latest.get("目标院校录取线"))
-    target_gap = safe_float(latest.get("差距分数"))
-    # Auto-compute gap if not stored but we have both values
-    score = latest_equiv if latest_equiv is not None else (eq_scores[-1] if eq_scores else 0)
-    if target_gap is None and target_line is not None and score > 0:
-        target_gap = round(score - target_line, 1)
-
-    tier_info = _compute_tier_info(macro, score, target_university, target_line, target_gap)
-
-    # Extract calculation detail from latest record
-    latest_calc_detail = ""
-    latest_subject_scores = []
-    detail_obj = parse_eq_detail(latest.get("详细信息", ""))
-    if detail_obj:
-        latest_calc_detail = detail_obj.get("calculation_detail", "")
-        latest_subject_scores = detail_obj.get("subject_scores", [])
-
-    template = env.get_template("report_personal.html")
-    return template.render(
-        generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
-        equivalent_score=f"{latest_equiv:.0f} 分" if latest_equiv is not None else "暂无",
-        latest_equiv=latest_equiv if latest_equiv is not None else 0,
-        confidence=str(latest.get("置信度", "-")).replace("级", "").strip() or "-",
-        method=latest.get("主计算方法", "-"),
-        calc_detail=latest_calc_detail,
-        error_lower=latest.get("误差区间下限", "-"),
-        error_upper=latest.get("误差区间上限", "-"),
-        has_analysis=has_analysis,
-        trend_class=trend_class,
-        trend_arrow=trend_arrow,
-        trend_text=trend_text,
-        prediction_state=pred or "-",
-        volatility_lower=vol_low if vol_low is not None else "-",
-        volatility_upper=vol_high if vol_high is not None else "-",
-        sigma=f"{sigma}分" if sigma is not None else "-",
-        volatility_style=volatility_style or "-",
-        is_first_record=is_first_record,
-        exam_count=len(eq_scores),
-        subject_scores=latest_subject_scores,
-        tier_info=tier_info,
-        disclaimer=DISCLAIMER,
-    )
-
-
-def render_trend(data, env):
-    """Render 高考总分趋势.html."""
-    eq_records = data["equivalent"]
-    exam_records = data.get("exams", [])
-
-    if not eq_records:
-        # 有考试记录但无等效分时，显示首次录入引导
-        is_first = len(exam_records) >= 1
-        exams_for_display = []
-        if is_first:
-            for e in exam_records:
-                exams_for_display.append({
-                    "date": e.get("日期", "-"),
-                    "name": e.get("考试名", "-"),
-                    "score": "-",
-                    "confidence": "-",
-                    "method": "等待计算",
-                    "method_switch": False,
-                    "calc_detail": "",
-                    "prev_method": "",
-                })
-            exams_for_display = list(reversed(exams_for_display))
-        template = env.get_template("report_trend.html")
-        return template.render(
-            generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
-            exams=exams_for_display,
-            has_analysis=False,
-            trend_class="flat",
-            trend_arrow="→",
-            trend_text="等待数据",
-            sigma="-",
-            volatility_lower="-",
-            volatility_upper="-",
-            labels={"positive": "-", "normal": "-", "negative": "-"},
-            cross_validations=[],
-            volatility_style="-",
-            is_first_record=is_first,
-            exam_count=len(exam_records),
-            disclaimer=DISCLAIMER,
-        )
-
-    exams = []
-    for r in eq_records:
-        # Extract calculation detail from 详细信息 JSON
-        detail_obj = parse_eq_detail(r.get("详细信息", ""))
-        calc_detail = detail_obj.get("calculation_detail", "") if detail_obj else ""
-
-        exams.append({
-            "date": r.get("日期", "-"),
-            "name": r.get("考试名", "-"),
-            "score": r.get("等效分（融合结果）", "-"),
-            "confidence": str(r.get("置信度", "-")).replace("级", "").strip() or "-",
-            "method": r.get("主计算方法", "-"),
-            "calc_detail": calc_detail,
-            "method_switch": False,  # will be set below
-            "prev_method": "",  # initialized for consistent dict structure
-        })
-
-    # I15: 检测方法切换，标记相邻两次考试方法不同的记录
-    for i in range(1, len(exams)):
-        if exams[i].get("method") != exams[i-1].get("method"):
-            exams[i]["method_switch"] = True
-            exams[i]["prev_method"] = exams[i-1].get("method", "")
-
-    # 显示时反转为降序（最新的在最上面，方便查看近期趋势）
-    exams = list(reversed(exams))
-
-    eq_scores = extract_eq_scores(eq_records)
-    weighted = filter_weighted(eq_records)
-    trend_class, trend_arrow, trend_text = compute_trend(eq_scores)
-    sigma, vol_low, vol_high = compute_volatility_weighted(weighted)
-    has_analysis = len(eq_scores) >= MIN_DATA_FOR_ANALYSIS
-    is_first_record = len(eq_scores) == 1
-    labels, label_sequence = eval_labels(eq_scores) if len(eq_scores) >= MIN_DATA_FOR_ANALYSIS else (None, None)
-    volatility_style = classify_volatility_style(labels, sigma, label_sequence) if has_analysis else None
-
-    # Cross validations summary — extract both method 1 and method 2
-    cross_validations = []
-    for r in eq_records:
-        for cv_num in ("1", "2"):
-            cv_method = r.get(f"交叉验证方法{cv_num}")
-            cv_score = r.get(f"交叉验证分{cv_num}")
-            if cv_method and cv_score:
-                diff = None
-                primary = safe_float(r.get("等效分（融合结果）"))
-                cv_score_f = safe_float(cv_score)
-                if cv_score_f is None:
-                    continue
-                if primary is not None:
-                    diff = f"{cv_score_f - primary:+.1f}"
-                cross_validations.append({
-                    "exam": r.get("考试名", "-"),
-                    "method": cv_method,
-                    "score": cv_score,
-                    "diff": diff or "-",
-                })
-
-    template = env.get_template("report_trend.html")
-    return template.render(
-        generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
-        exams=exams,  # 已按日期降序排列（最新在前，便于查看）
-        has_analysis=has_analysis,
-        trend_class=trend_class,
-        trend_arrow=trend_arrow,
-        trend_text=trend_text,
-        sigma=f"{sigma}" if sigma is not None else "-",
-        volatility_lower=vol_low if vol_low is not None else "-",
-        volatility_upper=vol_high if vol_high is not None else "-",
-        labels={"positive": labels["积极"] if labels else "-", "normal": labels["正常"] if labels else "-", "negative": labels["消极"] if labels else "-"},
-        volatility_style=volatility_style or "-",
-        is_first_record=is_first_record,
-        exam_count=len(exams),
-        cross_validations=cross_validations,
-        disclaimer=DISCLAIMER,
-    )
-
-
 def _build_subject_record(date, exam, raw, assigned, confidence, subject_name):
     """Build a single subject tracking record dict from raw/assigned scores.
 
-    Shared by 单科追踪 fallback and 成绩总表 fallback in render_subject().
+    Shared by 单科追踪 fallback and 成绩总表 fallback in render_all_subjects().
     For 语数英: always uses raw score. For 选科: uses assigned if available.
     """
     is_main = subject_name in ("语文", "数学", "英语")
@@ -658,109 +451,6 @@ def _build_subject_record(date, exam, raw, assigned, confidence, subject_name):
         "confidence": confidence or "-",
         "method": "-",
     }, score_float
-
-
-def render_subject(data, env, subject_name, sheet_name):
-    """Render a single subject tracking HTML.
-    Reads per-subject equivalent scores from 等效分记录 first;
-    falls back to 成绩总表.xlsx exam records.
-    """
-    eq_records = data.get("equivalent", [])
-    records = []
-    scores = []
-
-    # Primary: extract per-subject equivalent scores from saved eq data
-    if eq_records:
-        for eq in eq_records:
-            detail_obj = parse_eq_detail(eq.get("详细信息", ""))
-            if not detail_obj:
-                continue
-            for s in detail_obj.get("subject_scores", []):
-                if s.get("subject") != subject_name:
-                    continue
-                score = s.get("score")
-                if score is not None:
-                    score_f = safe_float(score)
-                    if score_f is None:
-                        continue
-                    scores.append(score_f)
-                    records.append({
-                        "date": eq.get("日期", "-"),
-                        "exam": eq.get("考试名", "-"),
-                        "score": f"{score_f:.1f}",
-                        "confidence": s.get("confidence", "-"),
-                        "method": s.get("method", "-"),
-                    })
-
-    # Fallback: extract from 单科追踪.xlsx or 成绩总表
-    if not records:
-        subject_data = data["subjects"].get(sheet_name, [])
-        if subject_data:
-            for r in subject_data:
-                raw = r.get("原始分")
-                assigned = r.get("赋分")
-                rec, score_float = _build_subject_record(
-                    r.get("日期"), r.get("考试名"), raw, assigned,
-                    r.get("赋分置信度"), subject_name,
-                )
-                records.append(rec)
-                if score_float is not None:
-                    scores.append(score_float)
-        else:
-            for exam in data.get("exams", []):
-                raw = None
-                assigned = None
-                conf = None
-                if subject_name in ("语文", "数学", "英语"):
-                    raw = exam.get(subject_name)
-                    conf = "B"
-                else:
-                    for i in range(1, 4):
-                        if str(exam.get(f"选科{i}名称", "")) == subject_name:
-                            raw = exam.get(f"选科{i}原始分")
-                            assigned = exam.get(f"选科{i}赋分")
-                            conf = exam.get(f"选科{i}赋分置信度") or "A"
-                            break
-                if raw is None or raw == "":
-                    continue
-                rec, score_float = _build_subject_record(
-                    exam.get("日期"), exam.get("考试名"), raw, assigned,
-                    conf, subject_name,
-                )
-                records.append(rec)
-                if score_float is not None:
-                    scores.append(score_float)
-
-    valid_scores = [s for s in scores if s is not None]
-    if not valid_scores:
-        # No data for this subject, still render an empty report
-        dynamic = "-"
-        latest = "-"
-        highest = "-"
-        trend_class, trend_arrow, trend_text = "flat", "→", "无数据"
-    else:
-        # EWMA for dynamic score (α=EWMA_ALPHA=0.3，越近权重越高)
-        dynamic = round(ewma(valid_scores, alpha=EWMA_ALPHA), 1)
-        latest = valid_scores[-1]
-        highest = max(valid_scores)
-        trend_class, trend_arrow, trend_text = compute_trend(valid_scores)
-
-    is_first_record = len(valid_scores) == 1
-    template = env.get_template("report_subject.html")
-    return template.render(
-        subject=subject_name,
-        generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
-        dynamic_score=dynamic,
-        latest=latest,
-        highest=highest,
-        trend_class=trend_class,
-        trend_arrow=trend_arrow,
-        trend_text=trend_text,
-        is_first_record=is_first_record,
-        exam_count=len(valid_scores),
-        records=list(reversed(records)),  # 降序显示（最新在前）
-        disclaimer=DISCLAIMER,
-    )
 
 
 def render_overview(data, env):
@@ -910,9 +600,6 @@ def render_all_subjects(data, env):
         "语文追踪": "语文",
         "数学追踪": "数学",
         "英语追踪": "英语",
-        "选科1追踪": "选科1",
-        "选科2追踪": "选科2",
-        "选科3追踪": "选科3",
     }
 
     exams = data["exams"]
@@ -922,11 +609,11 @@ def render_all_subjects(data, env):
         sub2_name = latest_exam.get("选科2名称")
         sub3_name = latest_exam.get("选科3名称")
         if sub1_name:
-            subject_sheet_map["选科1追踪"] = str(sub1_name)
+            subject_sheet_map[f"{str(sub1_name)}追踪"] = str(sub1_name)
         if sub2_name:
-            subject_sheet_map["选科2追踪"] = str(sub2_name)
+            subject_sheet_map[f"{str(sub2_name)}追踪"] = str(sub2_name)
         if sub3_name:
-            subject_sheet_map["选科3追踪"] = str(sub3_name)
+            subject_sheet_map[f"{str(sub3_name)}追踪"] = str(sub3_name)
 
     subjects = []
     for sheet_name, subject_name in subject_sheet_map.items():

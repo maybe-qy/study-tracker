@@ -390,8 +390,8 @@ def method_school_lookup(data, macro):
         return None
     lookup = sorted(lookup, key=lambda r: int(r.get("校内排名", 0)))
 
-    ranks = [int(r["校内排名"]) for r in lookup]
-    scores = [float(r["高考总分"]) for r in lookup]
+    ranks = [int(r.get("校内排名", 0)) for r in lookup]
+    scores = [float(r.get("高考总分", 0)) for r in lookup]
 
     # Exact match
     if calibrated_rank in ranks:
@@ -961,10 +961,13 @@ def method_school_subject_lookup(data, macro):
         ranks = sorted(rank_map.keys())
         if not ranks:
             continue
+        found = False
         if subj_rank <= ranks[0]:
             eq_score = round(rank_map[ranks[0]], 1)
+            found = True
         elif subj_rank >= ranks[-1]:
             eq_score = round(rank_map[ranks[-1]], 1)
+            found = True
         else:
             for i in range(len(ranks) - 1):
                 if ranks[i] <= subj_rank <= ranks[i + 1]:
@@ -975,9 +978,10 @@ def method_school_subject_lookup(data, macro):
                         ratio = (subj_rank - ranks[i]) / denom
                         eq_score = rank_map[ranks[i]] + ratio * (rank_map[ranks[i + 1]] - rank_map[ranks[i]])
                         eq_score = round(eq_score, 1)
+                    found = True
                     break
-            else:
-                continue
+        if not found:
+            continue
         subject_results.append({
             "name": name,
             "equivalent_score": eq_score,
@@ -1036,7 +1040,10 @@ def read_school_subject_data(macro):
                             rank = int(m.group())
                         else:
                             continue
-                    rank_scores[rank] = float(val)
+                    try:
+                        rank_scores[rank] = float(val)
+                    except (ValueError, TypeError):
+                        continue
             if rank_scores:
                 result[subj]["rank_scores"] = rank_scores
 
@@ -1198,7 +1205,7 @@ def _find_previous_subject_data(workspace, subject_name, current_exam_name):
 
         exams_skipped = 0
         for i, row in enumerate(rows):
-            d = dict(zip(headers, row))
+            d = dict(zip(headers, row[:len(headers)]))
             exam_name = str(d.get("考试名", ""))
             # Skip current exam: either first row or matching name
             if i == 0:
