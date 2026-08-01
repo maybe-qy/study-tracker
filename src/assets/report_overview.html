@@ -78,6 +78,10 @@
   details { margin-top: 24px; }
   summary { font-size: 13px; color: #94a3b8; cursor: pointer; }
   .disclaimer { font-size: 12px; color: #94a3b8; margin-top: 12px; padding: 12px; background: #f8fafc; border-radius: 6px; white-space: pre-line; line-height: 1.8; }
+  .divergence-light { display: inline-block; font-size: 10px; margin-right: 4px; vertical-align: middle; }
+  .divergence-low { color: #16a34a; }
+  .divergence-medium { color: #f59e0b; }
+  .divergence-high { color: #dc2626; }
 </style>
 </head>
 <body>
@@ -121,6 +125,29 @@
         {% endfor %}
       </div>
     </details>
+    {% endif %}
+
+    {% if trust_note and divergence %}
+    <div class="section" style="padding:8px 0;">
+      <div class="stat-row" style="padding:4px 0;">
+        <span class="stat-label">
+          <span class="divergence-light divergence-{{ divergence }}" title="方法分歧程度">
+            ●
+          </span>
+          方法一致性
+        </span>
+        <span class="stat-value">
+          {% if divergence == "low" %}
+          <span style="color:#16a34a;">✓ 一致</span>
+          {% elif divergence == "medium" %}
+          <span style="color:#f59e0b;">⚠ 轻度分歧</span>
+          {% else %}
+          <span style="color:#dc2626;">✗ 分歧较大</span>
+          {% endif %}
+        </span>
+      </div>
+      <div style="font-size:12px;color:#64748b;margin-top:2px;padding-left:24px;">{{ trust_note }}</div>
+    </div>
     {% endif %}
 
     {% if subject_scores %}

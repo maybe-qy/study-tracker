@@ -236,6 +236,40 @@ def compute_trend(scores):
         return ("flat", "→", "持平")
 
 
+def compute_trend_weighted(weighted_scores):
+    """Weighted trend direction using confidence-weighted linear regression.
+
+    Args:
+        weighted_scores: list of (score, weight) tuples.
+    Returns:
+        (class, arrow, text) tuple.
+    """
+    if len(weighted_scores) < 2:
+        return ("flat", "→", "数据不足")
+    recent = weighted_scores[-MIN_DATA_FOR_ANALYSIS:] if len(weighted_scores) >= MIN_DATA_FOR_ANALYSIS else weighted_scores
+    n = len(recent)
+    if n < 2:
+        return ("flat", "→", "持平")
+    scores = [s for s, _ in recent]
+    weights = [w for _, w in recent]
+    w_sum = sum(weights)
+    if w_sum == 0:
+        return ("flat", "→", "持平")
+    x_mean = sum((i) * weights[i] for i in range(n)) / w_sum
+    y_mean = sum(scores[i] * weights[i] for i in range(n)) / w_sum
+    num = sum(weights[i] * (i - x_mean) * (scores[i] - y_mean) for i in range(n))
+    den = sum(weights[i] * (i - x_mean) ** 2 for i in range(n))
+    if den == 0:
+        return ("flat", "→", "持平")
+    slope = num / den
+    if slope > TREND_SLOPE_THRESHOLD:
+        return ("up", "↑", "上升")
+    elif slope < -TREND_SLOPE_THRESHOLD:
+        return ("down", "↓", "下降")
+    else:
+        return ("flat", "→", "持平")
+
+
 def compute_volatility(scores):
     """Compute sigma and volatility range. Returns (sigma, lower, upper)."""
     if len(scores) < MIN_DATA_FOR_ANALYSIS:
@@ -487,6 +521,8 @@ def render_overview(data, env):
             exams=[],
             labels={"positive": "-", "normal": "-", "negative": "-"},
             cross_validations=[],
+            trust_note=None,
+            divergence=None,
             disclaimer=DISCLAIMER,
         )
 
@@ -495,7 +531,8 @@ def render_overview(data, env):
     eq_scores = extract_eq_scores(eq_records)
     weighted = filter_weighted(eq_records)
 
-    trend_class, trend_arrow, trend_text = compute_trend(eq_scores)
+    # Phase 3: 使用加权趋势分析（置信度越高权重越大）
+    trend_class, trend_arrow, trend_text = compute_trend_weighted(weighted) if len(weighted) >= 2 else compute_trend(eq_scores)
     sigma, vol_low, vol_high = compute_volatility_weighted(weighted)
     pred = prediction_state(eq_scores)
     has_analysis = len(eq_scores) >= MIN_DATA_FOR_ANALYSIS
@@ -515,10 +552,14 @@ def render_overview(data, env):
     # 从最新记录提取计算详情
     latest_calc_detail = ""
     latest_subject_scores = []
+    latest_trust_note = None
+    latest_divergence = None
     detail_obj = parse_eq_detail(latest.get("详细信息", ""))
     if detail_obj:
         latest_calc_detail = detail_obj.get("calculation_detail", "")
         latest_subject_scores = detail_obj.get("subject_scores", [])
+        latest_trust_note = detail_obj.get("trust_note")
+        latest_divergence = detail_obj.get("divergence")
 
     # ── 趋势表格数据 ──
     exams = []
@@ -590,6 +631,8 @@ def render_overview(data, env):
         exams=exams,
         labels={"positive": labels["积极"] if labels else "-", "normal": labels["正常"] if labels else "-", "negative": labels["消极"] if labels else "-"},
         cross_validations=cross_validations,
+        trust_note=latest_trust_note,
+        divergence=latest_divergence,
         disclaimer=DISCLAIMER,
     )
 

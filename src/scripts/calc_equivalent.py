@@ -47,6 +47,42 @@ from openpyxl import load_workbook
 from config import *  # noqa: F401,F403 — 统一业务常量
 from excel_utils import read_macro_data, filter_numeric_rows, filter_score_table
 
+# 数据源标签（用于跨族同源去重）
+DATA_SOURCES = {
+    "双模块换算法": "校内划线",
+    "校内划线换算（仅语数英放大）": "校内划线",
+    "分数线对照法": "特控线",
+    "排名锚定法": "排名",
+    "校内排名对照法": "对照表",
+    "人数校准法": "校内排名",
+    "校排阈值估算法": "校内排名",
+    "单科排名对照法": "单科对照表",
+}
+
+# 方法族编号（用于跨族去重判定）
+FAMILY_MAP = {
+    "双模块换算法": 1,
+    "校内划线换算（仅语数英放大）": 1,
+    "分数线对照法": 2,
+    "排名锚定法": 2,
+    "校内排名对照法": 2,
+    "人数校准法": 3,
+    "校排阈值估算法": 3,
+    "单科排名对照法": 4,
+}
+
+# 方法优先级（同置信度时作为主方法选择依据，数值越小优先级越高）
+METHOD_PRIORITY = {
+    "双模块换算法": 1,
+    "校内划线换算（仅语数英放大）": 2,
+    "分数线对照法": 3,
+    "排名锚定法": 4,
+    "校内排名对照法": 5,
+    "人数校准法": 6,
+    "校排阈值估算法": 7,
+    "单科排名对照法": 8,
+}
+
 
 # ── 共享工具函数（抽取自多个方法中的重复逻辑） ────────────────────────
 
@@ -567,29 +603,28 @@ def method_population_calibration(data, macro):
 
 
 def method_school_cutoff(data, macro):
-    """族① 校内划线换算（1A1B 二选一）.
+    """族① 校内划线换算（1A1B 并行）.
 
     Mode A: 选科有独立划线 → 双模块完整换算（A级）
     Mode B: 仅语数英划线 → 450→750等比例放大（B级）
+    两者并行，都参与融合。
     """
     cutoffs = load_upgrade_cutoffs(data)
     if cutoffs is None:
-        return None
+        return []
 
     main_data = cutoffs.get("语数英综合", {})
     if main_data.get("special") is None:
-        return None
+        return []
 
-    # 检测是否有选科独立划线
-    has_subject_cutoffs = any(
-        cutoffs.get(name, {}).get("special") is not None
-        for name in ELECTIVE_SUBJECTS
-    )
-
-    if has_subject_cutoffs:
-        return method_two_module(data, macro)  # Mode A: A级
-    else:
-        return _cutoff_main_only_mode(data, cutoffs, main_data)  # Mode B: B级
+    results = []
+    a = method_two_module(data, macro)  # Mode A
+    if a:
+        results.append(a)
+    b = _cutoff_main_only_mode(data, cutoffs, main_data)  # Mode B
+    if b:
+        results.append(b)
+    return results
 
 
 def _cutoff_main_only_mode(data, cutoffs, main_data):
@@ -781,8 +816,8 @@ def method_two_module(data, macro):
                 else:
                     # Use school对照表 or rough estimate
                     sub_eq = round(GK_SUB_SPECIAL * raw / SUB_FULL_SCORE, 1)
-                    conf = "D"
-                    detail = f"{name}无任何参照数据 → 粗略估算{sub_eq}分(D级)"
+                    conf = "C"
+                    detail = f"{name}无任何参照数据 → 粗略估算{sub_eq}分(C级)"
             if sub_eq is None:
                 details.append(f"[{name}] 无任何可用数据, 跳过")
                 continue
@@ -794,18 +829,20 @@ def method_two_module(data, macro):
 
     total_equivalent = round(total_equivalent, 1)
 
-    # Overall confidence: A if ≥50% modules are A and no module is D
+    # Overall confidence: 木桶原理，取最低置信度
     total_modules = sum(conf_counts.values())
     if conf_counts.get("D", 0) > 0:
         overall_conf = "C"
-    elif conf_counts.get("C", 0) >= 2:
-        overall_conf = "B"
-    elif conf_counts.get("A", 0) >= total_modules * 0.5:
-        overall_conf = "A"
-    elif conf_counts.get("A", 0) + conf_counts.get("B", 0) >= total_modules * 0.5:
+    elif conf_counts.get("C", 0) > 0:
+        # 有C级模块 → 拉低整体
+        if conf_counts.get("A", 0) >= 2:
+            overall_conf = "B"  # 有A级但有个别C级
+        else:
+            overall_conf = "C"  # 多数模块精度低
+    elif conf_counts.get("B", 0) > 0:
         overall_conf = "B"
     else:
-        overall_conf = "C"
+        overall_conf = "A"
 
     return {
         "method": "双模块换算法",
@@ -903,37 +940,34 @@ def method_school_threshold(data, macro):
 
 
 def method_external_reference(data, macro):
-    """族② 外部参考映射（2A 三选一）.
+    """族② 外部参考映射（2A 并行）.
 
-    Mode A1: 有特控线 → 分数线对照法（A级, 优先）
+    Mode A1: 有特控线 → 分数线对照法（A级）
     Mode A2: 有排名 → 排名锚定法（A级）
     Mode A3: 有校排名+对照表 → 校内排名对照法（A级）
+    三者并行，都参与融合。
     """
-    result = method_score_line(data, macro)
-    if result:
-        return result
-    result = method_percentile(data, macro)
-    if result:
-        return result
-    result = method_school_lookup(data, macro)
-    if result:
-        return result
-    return None
+    results = []
+    for fn in [method_score_line, method_percentile, method_school_lookup]:
+        r = fn(data, macro)
+        if r:
+            results.append(r)
+    return results
 
 
 def method_school_rank(data, macro):
-    """族③ 校内排名映射（三选一）.
+    """族③ 校内排名映射（并行）.
 
-    Mode A: 有门槛上线人数 → 人数校准法（B级, 优先）
+    Mode A: 有门槛上线人数 → 人数校准法（B级）
     Mode B: 有升级Sheet阈值 → 阈值插值法（B级）
+    两者并行，都参与融合。
     """
-    result = method_population_calibration(data, macro)
-    if result:
-        return result
-    result = method_school_threshold(data, macro)
-    if result:
-        return result
-    return None
+    results = []
+    for fn in [method_population_calibration, method_school_threshold]:
+        r = fn(data, macro)
+        if r:
+            results.append(r)
+    return results
 
 
 def method_school_subject_lookup(data, macro):
@@ -1286,24 +1320,57 @@ def run(data):
             "reason": "宏观数据_只读.xlsx 不存在，请先完成初始设置",
         }
 
-    methods = []
+    # ── 收集所有族的方法结果（扁平化） ──
+    all_results = []
 
-    # 4 个族各派一个胜出者
-    result = method_school_cutoff(data, macro)          # 族① 1A1B
-    if result:
-        methods.append(result)
+    # 族① 返回 list
+    for r in method_school_cutoff(data, macro):
+        if r:
+            all_results.append(r)
 
-    result = method_external_reference(data, macro)      # 族② 2A三选一
-    if result:
-        methods.append(result)
+    # 族② 返回 list
+    for r in method_external_reference(data, macro):
+        if r:
+            all_results.append(r)
 
-    result = method_school_rank(data, macro)             # 族③ 三选一
-    if result:
-        methods.append(result)
+    # 族③ 返回 list
+    for r in method_school_rank(data, macro):
+        if r:
+            all_results.append(r)
 
-    result = method_school_subject_lookup(data, macro)   # 方法④ 独立
-    if result:
-        methods.append(result)
+    # 方法④ 返回单个
+    r = method_school_subject_lookup(data, macro)
+    if r:
+        all_results.append(r)
+
+    if not all_results:
+        return {
+            "status": "insufficient_data",
+            "reason": "当前数据不足以计算等效分。至少需要以下之一：本次考试特控线、全市/联盟排名、校内排名+对照表。",
+        }
+
+    # ── 跨族同源去重 ──
+    # 同族内同数据源只保留置信度最高的方法
+    seen = {}  # (family, source) → index in all_results
+    to_remove = set()
+    for i, m in enumerate(all_results):
+        method_name = m["method"]
+        family = FAMILY_MAP.get(method_name, 0)
+        source = DATA_SOURCES.get(method_name, "未知")
+        key = (family, source)
+        if key in seen:
+            prev_idx = seen[key]
+            prev_conf = CONFIDENCE_ORDER.get(all_results[prev_idx]["confidence"], 0)
+            curr_conf = CONFIDENCE_ORDER.get(m["confidence"], 0)
+            if curr_conf > prev_conf:
+                to_remove.add(prev_idx)
+                seen[key] = i
+            else:
+                to_remove.add(i)
+        else:
+            seen[key] = i
+
+    methods = [m for i, m in enumerate(all_results) if i not in to_remove]
 
     if not methods:
         return {
@@ -1312,7 +1379,6 @@ def run(data):
         }
 
     # ── 置信度门槛：仅C级方法不可用 ──
-    # 需要至少一个A或B级方法才返回结果
     best_confidence = max(methods, key=lambda m: CONFIDENCE_ORDER.get(m["confidence"], 0))["confidence"]
     if best_confidence in ("C", "D"):
         return {
@@ -1322,12 +1388,12 @@ def run(data):
                       "2）全市/联盟排名+总人数 →A级(±5分)。",
         }
 
-    # 报告的置信度取主方法的置信度，与误差区间一致
-    primary = methods[0]  # Highest priority method
-    equivalent_score = primary["score"]
+    # 主方法 = 置信度最高的方法（同分时按 METHOD_PRIORITY 优先级排序）
+    primary = max(methods, key=lambda m: (CONFIDENCE_ORDER.get(m["confidence"], 0), -METHOD_PRIORITY.get(m["method"], 99)))
     primary_confidence = primary["confidence"]
     reported_confidence = primary_confidence if primary_confidence in ("A", "B") else best_confidence
     margin = ERROR_MARGINS.get(primary_confidence, 10)
+    equivalent_score = primary["score"]
     error_lower = round(max(0, equivalent_score - margin), 1)
     error_upper = round(min(FULL_SCORE, equivalent_score + margin), 1)
 
@@ -1345,13 +1411,15 @@ def run(data):
     # calculation_detail: primary method as base, fusion appended later if applicable
     calculation_detail = primary.get("detail", "")
     if len(methods) >= 2:
-        cv_names = "、".join(m["method"] for m in methods[1:])
+        cv_names = "、".join(m["method"] for m in methods if m is not primary)
         calculation_detail += f"（交叉验证：{cv_names}）"
     calculation_detail = f"[主方法] {calculation_detail}"
 
     # Cross-validations: supplementary methods vs primary
     cross_validations = []
-    for m in methods[1:]:
+    for m in methods:
+        if m is primary:
+            continue
         diff = round(m["score"] - primary["score"], 1)
         cross_validations.append({
             "method": m["method"],
@@ -1376,8 +1444,6 @@ def run(data):
             trust_note = f"方法分歧较大（最大差异{max_diff:.0f}分），建议补充排名或特控线数据以提高可靠性"
             divergence = "high"
 
-    # best_confidence already determined above (before C-level gate)
-
     # ── 数据一致性校验 ──
     warnings = []
     user_total = data.get("city_total") or data.get("alliance_total")
@@ -1397,15 +1463,17 @@ def run(data):
 
     # ── 单科等效分（展示用，从总分比例分配，保证各科之和=总分）──
     data["_total_equivalent"] = equivalent_score
-    # 延迟计算：融合时仅算一次
     subject_scores = []
 
     # ── 多方法加权融合（纯族间独立） ──
-    # 融合池 = { 族①胜出者, 族②胜出者, 族③胜出者, 方法④结果 }
-    # 同族不重复，按置信度权重加权融合
     components = []  # [(score, weight, label), ...]
     for m in methods:
         w = CONFIDENCE_WEIGHTS.get(m["confidence"], 0)
+        # Phase 4: 方法④按科目数加权衰减
+        if m["method"] == "单科排名对照法":
+            n_subjects = len(m.get("subject_scores", []))
+            if n_subjects <= 2:
+                w = w * n_subjects / 3.0  # 1科→0.33, 2科→0.67
         if w > 0:
             components.append((m["score"], w, m["method"]))
 
@@ -1418,16 +1486,27 @@ def run(data):
         calculation_detail += f" | [融合] {' + '.join(parts)} → {fused}分"
 
         equivalent_score = fused
-        # 用融合后的总分重算各科等效分，保证各科加总=总分
         data["_total_equivalent"] = equivalent_score
         subject_scores = compute_subject_equivalents(data, macro)
-        # 误差区间基于融合分 ± 最大方法间偏差
-        all_scores = [s for s, _, _ in components]
-        max_dev = max(abs(fused - s) for s in all_scores)
-        error_lower = round(max(0, fused - max(margin, max_dev + 3)), 1)
-        error_upper = round(min(FULL_SCORE, fused + max(margin, max_dev + 3)), 1)
+
+        # Phase 2: 动态置信度升级 — 3+方法收敛则升级
+        fusion_confidence = reported_confidence
+        if len(components) >= 3:
+            score_vals = [s for s, _, _ in components]
+            if max(score_vals) - min(score_vals) <= DIVERGENCE_LOW:
+                upgrade_map = {"C": "B", "B": "A", "A": "A"}
+                fusion_confidence = upgrade_map.get(reported_confidence, reported_confidence)
+
+        # Phase 2: 误差区间基于融合后置信度
+        fusion_margin = ERROR_MARGINS.get(fusion_confidence, 10)
+        score_vals = [s for s, _, _ in components]
+        max_dev = max(abs(fused - s) for s in score_vals)
+        error_lower = round(max(0, fused - max(fusion_margin, max_dev + 3)), 1)
+        error_upper = round(min(FULL_SCORE, fused + max(fusion_margin, max_dev + 3)), 1)
+
+        # 更新报告的置信度
+        reported_confidence = fusion_confidence
     else:
-        # 融合不触发时用主方法等效分计算单科
         subject_scores = compute_subject_equivalents(data, macro)
 
     result = {
