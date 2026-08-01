@@ -1,13 +1,13 @@
 # 学业追踪工具 — AI 助手快速指南
 
-> 本文件是给 AI 助手（豆包、元宝、ChatGPT、Claude 等）阅读的指令文档。
+> 本文件是给 AI 助手（豆包工作任务、超级元宝、ChatGPT、Claude 等）阅读的指令文档。
 > 用户发给你本文件内容或本文件路径后，你按照下面的流程操作。
 
 **平台适配速查**：操作前先确认当前环境类型，加载对应的适配规则——
 
-- **豆包 Office Task 模式**：`skill/DOUBAO_PROMPT.md` — Python 沙箱，不支持 shell 管道和 heredoc。
+- **豆包工作任务模式**：`skill/DOUBAO_PROMPT.md` — Python 沙箱，不支持 shell 管道和 heredoc。
   使用替代方案：`from record_exam import run; run({...})` 直接导入模块调用，或 `python record_exam.py --json-file data.json` 通过文件传参。
-- **元宝超级智能体**：`skill/YUANBAO_PROMPT.md` — 对话式智能体，有内置工具（代码执行、文件读写等）。
+- **超级元宝**：`skill/YUANBAO_PROMPT.md` — 对话式智能体，有内置工具（代码执行、文件读写等）。
   关键：用代码执行工具替用户运行脚本，通过文件传参（不支持管道），每条操作用户可见需展示进度。
 - **其他平台（ChatGPT/Claude 等）**：按通用流程执行，支持管道和文件两种方式。
 
@@ -23,7 +23,7 @@ https://github.com/maybe-qy/study-tracker
 
 ——
 
-**如果你在元宝 App 使用：** 复制下面这段话发送给元宝即可。元宝会自动部署项目并引导你录入成绩。
+**如果你在超级元宝使用：** 复制下面这段话发送给超级元宝即可。超级元宝会自动部署项目并引导你录入成绩。
 
 ```text
 帮我部署运行这个项目：
@@ -153,7 +153,7 @@ echo '{
 python3 src/scripts/record_exam.py --json-file exam_data.json
 ```
 
-**元宝方式（代码执行工具）：** 用 Python 的 subprocess 模块调用，通过文件传参（不支持管道）：
+**超级元宝方式（代码执行工具）：** 用 Python 的 subprocess 模块调用，通过文件传参（不支持管道）：
 
 ```python
 import json, subprocess
@@ -230,7 +230,7 @@ echo '{"workspace":".", ...}' | python3 src/scripts/calc_equivalent.py
 python3 src/scripts/calc_equivalent.py --json-file calc_input.json --output eq_result.json
 ```
 
-**元宝方式（代码执行工具）：**
+**超级元宝方式（代码执行工具）：**
 
 ```python
 import json, subprocess
@@ -278,7 +278,7 @@ python3 src/scripts/calc_equivalent.py --json-file calc_input.json --output eq_r
 python3 src/scripts/save_equivalent.py --json-file eq_result.json --workspace . --exam-name "11月期中" --exam-date "2026-11"
 ```
 
-**元宝方式（代码执行工具）：**
+**超级元宝方式（代码执行工具）：**
 
 ```python
 import subprocess
@@ -301,7 +301,7 @@ cd <项目目录>
 python3 src/scripts/generate_reports.py --workspace .
 ```
 
-**元宝方式（代码执行工具）：**
+**超级元宝方式（代码执行工具）：**
 
 ```python
 import subprocess
@@ -350,9 +350,9 @@ print(result.stdout)
 2. **`单科追踪.html` 告知文件名**，告诉用户：
    "另外还有一份单科追踪.html，包含各科分数趋势，如需查看可以让我输出。"
 
-3. **如果平台支持文件下载**：把所有 .html 文件作为附件发送，无需输出代码。**元宝模式下，优先使用文件下载功能**（如果有），让用户直接下载 HTML 文件。
+3. **如果平台支持文件下载**：把所有 .html 文件作为附件发送，无需输出代码。**超级元宝模式下，优先使用文件下载功能**（如果有），让用户直接下载 HTML 文件。
 
-**元宝专属提示**：如果元宝有文件下载工具，直接用工具提供报告文件下载链接给用户，无需输出 HTML 代码块。如果元宝没有文件下载功能，就按上述策略输出 HTML 代码块。
+**超级元宝专属提示**：如果超级元宝有文件下载工具，直接用工具提供报告文件下载链接给用户，无需输出 HTML 代码块。如果超级元宝没有文件下载功能，就按上述策略输出 HTML 代码块。
 
 **绝对不要**：
 - 只说"文件在 output/ 目录下，用浏览器打开"——用户无法访问你的文件系统

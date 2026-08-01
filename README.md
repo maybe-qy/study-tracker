@@ -56,12 +56,18 @@ study-tracker 做的事情很简单：**把每次模考的分数，换算到同�
 
 ## 快速开始（推荐：通过 AI 助手）
 
-把下面这段话复制给你的 AI 助手（豆包/元宝/ChatGPT/Claude 等）：
+把下面这段话复制给你的 AI 助手（豆包/ChatGPT/Claude 等）：
 
 > 帮我部署运行这个项目：https://github.com/maybe-qy/study-tracker
 > 请先阅读 skill/QUICKSTART.md，然后帮我录入成绩。
 
 AI 会自动完成部署、录入成绩、计算等效分、生成报告。全程对话操作，**不需要你碰命令行。**
+
+> 在 **超级元宝** 中使用时，请用下面这段话：
+>
+> 帮我部署运行这个项目：https://github.com/maybe-qy/study-tracker
+> 请先阅读 skill/YUANBAO_PROMPT.md 了解适配规则，然后阅读 skill/QUICKSTART.md 了解流程。
+> 按流程引导我完成首次成绩录入。
 
 ---
 
@@ -170,9 +176,9 @@ python3 src/scripts/generate_reports.py --workspace .
 
 ---
 
-## 在豆包/元宝中使用
+## 在豆包工作任务 / 超级元宝中使用
 
-### 豆包（任务模式）
+### 豆包工作任务模式
 
 豆包的 Python 沙箱不支持 shell 管道和 heredoc，用文件传参方式：
 
@@ -183,9 +189,9 @@ python src/scripts/save_equivalent.py --json-file eq_result.json --workspace . -
 python src/scripts/generate_reports.py --workspace .
 ```
 
-### 元宝（超级智能体）
+### 超级元宝
 
-元宝有内置代码执行工具，通过 `subprocess` 调用脚本，见 `skill/YUANBAO_PROMPT.md` 的详细适配说明。
+超级元宝有内置代码执行工具，通过 `subprocess` 调用脚本，见 `skill/YUANBAO_PROMPT.md` 的详细适配说明。
 
 ---
 
@@ -214,8 +220,8 @@ study-tracker/
 ├── skill/                     # AI 助手适配文档
 │   ├── SKILL.md               # 完整 Skill 定义
 │   ├── QUICKSTART.md          # 快速指南
-│   ├── DOUBAO_PROMPT.md       # 豆包适配
-│   └── YUANBAO_PROMPT.md      # 元宝适配
+│   ├── DOUBAO_PROMPT.md       # 豆包工作任务模式适配
+│   └── YUANBAO_PROMPT.md      # 超级元宝适配
 ├── tests/                     # 测试套件
 │   └── test_calc_equivalent.py
 ├── data/                      # 数据目录（Git 忽略个人数据）
