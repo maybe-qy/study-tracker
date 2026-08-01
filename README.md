@@ -1,62 +1,78 @@
 <div align="center">
 
-# 学业追踪与等效分报告
+# study-tracker
 
-**面向高中学生的学业数据整合工具**
+**把你的模考成绩换算成高考等效分，看清自己真正的位置**
 
-追踪考试成绩 · 计算等效高考分 · 分析趋势波动 · 生成可视化报告
+追踪考试成绩 · 计算等效高考分 · 分析趋势波动 · 一键生成可视化报告
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9+-green.svg)](https://www.python.org/)
 [![Stars](https://img.shields.io/github/stars/maybe-qy/study-tracker?style=social)](https://github.com/maybe-qy/study-tracker)
 [![Issues](https://img.shields.io/github/issues/maybe-qy/study-tracker)](https://github.com/maybe-qy/study-tracker/issues)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/maybe-qy/study-tracker/pulls)
 
 </div>
 
 ---
 
-## 报告演示
+## 报告预览
 
 <div align="center">
 
-**个人总览报告** — 双 Tab：个人档案（等效分、各科拆分、趋势状态、院校定位）+ 高考总分趋势（等效分时间序列、置信度颜色编码、波动分析、交叉验证）
+**个人总览** — 等效分、各科拆分、趋势状态、院校定位，一目了然
 
 ![个人总览报告](docs/report-personal-demo.png)
 
-**单科追踪报告** — 6 Tab 整合：语文/数学/英语/选科 1/2/3 独立追踪，动态赋分计算
+**单科追踪** — 语文/数学/英语/选科独立追踪，动态赋分计算
 
-![趋势报告](docs/report-trend-demo.png)
+![单科追踪报告](docs/report-trend-demo.png)
 
 </div>
 
 ---
 
-## 功能一览
+## 为什么需要这个工具
+
+每次模考出分，你拿到的是"这次 580 分，校排名 150/600"。但 580 分到底意味着什么？是进步了还是退步了？离你的目标大学还差多远？
+
+**不同考试的难度不一样，原始分无法直接比较。** 这次 580 可能排年级前 20%，下次 590 可能只排前 30%——光看分数，你根本不知道自己是进步还是退步。
+
+study-tracker 做的事情很简单：**把每次模考的分数，换算到同一个标尺——高考等效分。** 这样你就能清清楚楚地看到自己的真实水平变化，而不是被原始分和排名迷惑。
+
+---
+
+## 它能帮你做什么
 
 | 功能 | 说明 |
 |------|------|
-| **成绩录入** | 逐字段录入考试科目成绩、排名、特控线，自动校验总分一致性 |
-| **等效分计算** | 3 方法族 + 1 独立方法按优先级自动选择，加权融合，标注置信度和误差区间 |
-| **趋势分析** | 等效分时间序列追踪，EWMA 预测状态（积极/正常/消极），波动风格分类 |
-| **单科追踪** | 语文/数学/英语/选科独立追踪，动态赋分计算 |
-| **院校定位** | 目标院校差距分析，院校层次梯队定位 |
-| **HTML 报告** | 独立报告一键生成，按日期降序排列（最新在前） |
+| **成绩录入** | 告诉 AI 各科分数，自动校验总分一致性，支持原始分和赋分 |
+| **等效分计算** | 3 种方法族 + 1 种独立方法，自动选择最优路径，加权融合，标注置信度等级 |
+| **趋势分析** | 等效分随时间的变化曲线，自动判断上升/下降/波动，EWMA 预测状态 |
+| **单科追踪** | 每科独立追踪，动态赋分计算，哪些科目稳、哪些科目在波动，一目了然 |
+| **院校定位** | 设定目标院校，自动计算差距；无目标时按分数段给出层次参考 |
+| **HTML 报告** | 2 份报告（个人总览 + 单科追踪）一键生成，浏览器打开即可查看 |
 
-## 用 AI 助手开始（推荐）
+---
 
-把下面的内容发给你的 AI 助手（豆包、ChatGPT、Claude 等）：
+## 快速开始（推荐：通过 AI 助手）
+
+把下面这段话复制给你的 AI 助手（豆包/元宝/ChatGPT/Claude 等）：
 
 > 帮我部署运行这个项目：https://github.com/maybe-qy/study-tracker
 > 请先阅读 skill/QUICKSTART.md，然后帮我录入成绩。
 
-AI 会自动完成部署、录入、计算、生成报告，全程对话操作，无需命令行。
+AI 会自动完成部署、录入成绩、计算等效分、生成报告。全程对话操作，**不需要你碰命令行。**
 
 ---
 
-## 命令行快速开始
+## 手动安装
 
-### 安装
+### 环境要求
+
+- Python 3.9+
+- 依赖：openpyxl（Excel 读写）、Jinja2（HTML 模板渲染）
+
+### 安装步骤
 
 ```bash
 git clone https://github.com/maybe-qy/study-tracker.git
@@ -70,17 +86,7 @@ pip install -r requirements.txt
 python3 src/scripts/setup_workspace.py --workspace .
 ```
 
-创建目录结构和带表头的 Excel 文件：
-
-```
-data/
-├── macro/          # 宏观数据（一分一段表、特控线、赋分区间等）
-├── school/         # 学校招生录取数据
-└── personal/       # 个人数据（成绩总表、等效分记录、单科追踪）
-    └── individual/ # 每次考试的 Markdown 不可变存档
-```
-
-### 录入第一次成绩
+### 录入成绩
 
 ```bash
 python3 src/scripts/record_exam.py << 'EOF'
@@ -103,10 +109,13 @@ python3 src/scripts/record_exam.py << 'EOF'
 EOF
 ```
 
-### 计算等效分
+### 计算等效分 + 保存
 
 ```bash
-python3 src/scripts/calc_equivalent.py << 'EOF'
+python3 src/scripts/calc_equivalent.py << 'EOF' | python3 src/scripts/save_equivalent.py \
+  --workspace . \
+  --exam-name "10月月考" \
+  --exam-date "2026-10-15"
 {
   "workspace": ".",
   "exam_name": "10月月考",
@@ -127,65 +136,45 @@ python3 src/scripts/calc_equivalent.py << 'EOF'
 EOF
 ```
 
-### 保存等效分
-
-将上一步的输出通过管道传给 `save_equivalent.py`：
-
-```bash
-python3 src/scripts/calc_equivalent.py < exam_data.json | python3 src/scripts/save_equivalent.py \
-  --workspace . \
-  --exam-name "10月月考" \
-  --exam-date "2026-10-15"
-```
-
 ### 生成报告
 
 ```bash
 python3 src/scripts/generate_reports.py --workspace .
 ```
 
-生成 HTML 报告到 `output/` 目录：
+报告输出到 `output/` 目录：
 
-| 报告 | 说明 |
+| 报告 | 内容 |
 |------|------|
 | `个人总览.html` | 双 Tab：个人档案（等效分、状态判断、院校定位）+ 高考总分趋势（等效分时间序列、方法切换、交叉验证） |
 | `单科追踪.html` | 6 Tab：语文/数学/英语/选科 1/2/3 独立追踪，动态赋分计算 |
 
-## 在豆包中使用
+---
 
-豆包的 Python 沙箱不支持 shell 管道和 heredoc。提供两种替代方案：
+## 等效分是怎么算的
 
-**方案一（推荐）：直接导入模块**
+系统根据你提供的数据，自动选择最优计算路径：
 
-```python
-import sys; sys.path.insert(0, "src/scripts")
+| 方法族 | 子方法 | 置信度 | 需要哪些数据 |
+|--------|--------|--------|-------------|
+| **族① 校内划线换算** | 双模块完整换算 | A 级 ±5 | 各科特控线 + 浙大线 |
+|  | 语数英等比例放大 | B 级 ±10 | 仅语数英划线 |
+| **族② 外部参考映射** | 分数线对照法 | A 级 ±5 | 本次模考特控线 |
+|  | 排名锚定法 | A 级 ±5 | 全市/联盟排名 |
+|  | 校内排名对照法 | A 级 ±5 | 本校高考对照表 |
+| **族③ 校内排名映射** | 本校对照表 | A 级 ±5 | 历届高考排名-分数对照表 |
+|  | 年级排名映射 | B 级 ±10 | 校内排名 + 总人数 |
+| **方法④ 单科排名对照** | 单科排名对照法 | A 级 ±5 | 单科排名-等效分对照表 |
 
-# 1. 初始化工作区（首次）
-from setup_workspace import run as setup; setup(".")
+数据越多，精度越高。**只有校排名时不算等效分**，因为误差太大（±15 分以上），没有参考价值。
 
-# 2. 录入成绩
-from record_exam import run as record
-record({"workspace": ".", "exam_name": "10月月考", "exam_date": "2026-10-15",
-        "exam_type": "月考", "grade": "高二", "total_score": 580,
-        "cn_score": 105, "math_score": 110, "en_score": 115,
-        "sub1_name": "物理", "sub1_raw": 78, "sub1_assigned": 85,
-        "sub2_name": "化学", "sub2_raw": 72, "sub2_assigned": 88,
-        "sub3_name": "生物", "sub3_raw": 68, "sub3_assigned": 82,
-        "school_rank": 80, "school_total": 835, "special_line": 542.5})
+---
 
-# 3. 计算等效分
-from calc_equivalent import run as calc
-eq = calc({"workspace": ".", "total_score": 580, "special_line_exam": 542.5})
+## 在豆包/元宝中使用
 
-# 4. 保存等效分
-from save_equivalent import run as save_eq
-save_eq(".", "10月月考", "2026-10-15", eq)
+### 豆包（任务模式）
 
-# 5. 生成报告
-from generate_reports import run as report; report(".")
-```
-
-**方案二：JSON 文件传参**
+豆包的 Python 沙箱不支持 shell 管道和 heredoc，用文件传参方式：
 
 ```bash
 python src/scripts/record_exam.py --json-file exam_data.json
@@ -194,115 +183,105 @@ python src/scripts/save_equivalent.py --json-file eq_result.json --workspace . -
 python src/scripts/generate_reports.py --workspace .
 ```
 
-## 等效分计算方法
+### 元宝（超级智能体）
 
-3 方法族 + 1 独立方法按优先级自动选择，加权融合（A=1.0 / B=0.8 / C=0.5）。v5.0 起采用方法族架构，每族只派一个胜出者参与融合。
+元宝有内置代码执行工具，通过 `subprocess` 调用脚本，见 `skill/YUANBAO_PROMPT.md` 的详细适配说明。
 
-- **族① 校内划线换算（1A1B）**：选科有独立划线时双模块完整换算（A 级），仅语数英划线时 450→750 等比例放大（B 级）
-- **族② 外部参考映射（2A 三选一）**：分数线对照法（A 级，优先），排名锚定法（A 级），校内排名对照法（A 级）
-- **族③ 校内排名映射（二选一）**：本校对照表（A 级），年级排名映射（B 级）
-- **方法④ 单科排名对照法**：单科对照表独立换算（A 级）
+---
 
-## 目录结构
+## 数据安全
+
+- **完全离线运行**，所有计算在本地完成，零网络请求
+- 全部数据存储在本地的 Excel 文件中，不上传任何信息
+- `data/personal/` 目录已在 `.gitignore` 中排除，随 Git 操作不会泄露个人数据
+- 建议使用前审阅脚本源码
+
+---
+
+## 项目结构
 
 ```
 study-tracker/
 ├── src/
-│   ├── scripts/
-│   │   ├── config.py               # 集中配置常量
-│   │   ├── setup_workspace.py      # 工作区初始化
-│   │   ├── record_exam.py          # 成绩录入
-│   │   ├── calc_equivalent.py      # 等效分计算（3方法族+1独立）
-│   │   ├── save_equivalent.py      # 等效分保存
-│   │   ├── generate_reports.py     # HTML报告生成
-│   │   └── excel_utils.py          # Excel读写工具函数
-│   └── assets/
-│       ├── logos/                  # 大学校徽SVG（~95所）
-│       ├── report_overview.html    # 个人总览模板（Tab×2）
-│       └── report_subjects.html    # 单科追踪模板（Tab×6）
-├── skill/
-│   ├── SKILL.md                    # 完整 Skill 定义
-│   ├── QUICKSTART.md               # AI 助手快速指南
-│   └── references/                 # 参考文档
-├── tests/                          # pytest 测试
-├── docs/                           # 项目介绍与竞品分析
-├── data/                           # 数据目录
-├── output/                         # 报告输出（Git忽略）
-├── 原则/                           # 红线与原则文档
-├── 推广/                           # 推广文案
-├── requirements.txt
-├── requirements-dev.txt
+│   ├── scripts/               # Python 计算脚本
+│   │   ├── config.py          # 集中配置常量
+│   │   ├── record_exam.py     # 成绩录入
+│   │   ├── calc_equivalent.py # 等效分计算引擎
+│   │   ├── save_equivalent.py # 结果保存
+│   │   ├── generate_reports.py# HTML 报告生成
+│   │   └── excel_utils.py     # Excel 工具函数
+│   └── assets/                # 报告模板
+├── skill/                     # AI 助手适配文档
+│   ├── SKILL.md               # 完整 Skill 定义
+│   ├── QUICKSTART.md          # 快速指南
+│   ├── DOUBAO_PROMPT.md       # 豆包适配
+│   └── YUANBAO_PROMPT.md      # 元宝适配
+├── tests/                     # 测试套件
+│   └── test_calc_equivalent.py
+├── data/                      # 数据目录（Git 忽略个人数据）
+│   ├── macro/                 # 宏观数据
+│   ├── school/                # 学校招生数据
+│   └── personal/              # 个人成绩数据
+├── output/                    # 生成的 HTML 报告（Git 忽略）
+├── docs/                      # 项目文档
 ├── pyproject.toml
-├── CHANGELOG.md
-└── LICENSE
+├── requirements.txt
+└── CHANGELOG.md
 ```
 
-## 依赖
+---
 
-| 依赖 | 版本 | 用途 |
-|------|------|------|
-| Python | 3.9+ | 运行环境 |
-| openpyxl | 3.1+ | Excel 读写 |
-| Jinja2 | 3.1+ | HTML 模板渲染 |
+## 常见问题
 
-## 权限与安全
+**等效分是预测高考分吗？**
 
-- 所有计算在本地完成，**完全离线运行**，无网络请求
-- 仅操作用户指定的 workspace 目录，不访问其他路径
-- 不收集用户个人信息、浏览器缓存、SSH 密钥等
-- 建议执行前审阅 Python 脚本源码
+不是。等效分是把校内考试分数换算到高考尺度上的参考值，帮你评估当前水平相对于高考分数线的大致位置。实际高考成绩受多种因素影响，等效分不构成预测。
 
-## Roadmap
+**没有特控线的校考怎么算？**
 
-- [x] 3 方法族 + 1 独立方法架构（v5.0 方法族重构）
-- [x] 报告 8→2 Tab 化整合（个人总览 + 单科追踪）
-- [x] 跨次回退折扣固定 0.9
-- [x] 全盘扫描 10 个 bug 修复（含 1 critical）
+系统会自动降级到外部参考映射方法（需要全市/联盟排名）。如果什么划线数据都没有，系统会返回"数据不足"，你需要问老师要一下特控线。
 
-## FAQ
+**支持哪些省份？**
 
-**Q: 等效分是预测高考分吗？**
+当前默认适配浙江新高考（选考赋分制）。其他省份可通过替换一分一段表和特控线来适配，但选考赋分逻辑需用户自行调整。
 
-不是。等效分是将校内考试分数换算到高考尺度上的参考值，帮助评估当前水平相对于高考分数线的大致位置。实际高考成绩受多种因素影响，等效分不构成预测。
+**数据安全吗？**
 
-**Q: 没有特控线的校考怎么计算？**
+全部数据存在本地，不上传不联网。Git 提交时个人数据被 `.gitignore` 排除，不会意外泄露。
 
-系统会自动降级到族②外部参考映射（排名锚定法，B 级）。推荐补充排名数据以启用 A 级方法。若无任何 A/B 级方法可用，返回 insufficient_data。
-
-**Q: 支持哪些省份？**
-
-当前适配浙江新高考（选考赋分制）。一分一段表和特控线数据需用户自行导入。其他省份可通过修改宏观数据适配。
-
-**Q: 数据安全吗？**
-
-全部数据存储在本地 Excel 文件中，不上传任何信息到外部服务器。`data/personal/` 目录已在 `.gitignore` 中排除。
+---
 
 ## 贡献
 
-欢迎提交 Issue 和 PR：
+欢迎提交 Issue 和 Pull Request：
 
-- [报告问题](https://github.com/maybe-qy/study-tracker/issues)
-- [提交 Pull Request](https://github.com/maybe-qy/study-tracker/pulls)
+- [报告问题](https://github.com/maybe-qy/study-tracker/issues/new?labels=bug)
+- [建议新功能](https://github.com/maybe-qy/study-tracker/issues/new?labels=enhancement)
+- [提交代码](https://github.com/maybe-qy/study-tracker/pulls)
 
-## 深入文档
+---
+
+## 深入阅读
 
 | 文档 | 内容 |
 |------|------|
-| [SKILL.md](skill/SKILL.md) | 完整 Skill 定义与交互流程 |
-| [计算方法详解](skill/references/calculation_methods.md) | 3 方法族 + 1 独立方法公式与边界条件 |
+| [完整 Skill 定义](skill/SKILL.md) | 角色定义、交互流程、全部规则 |
+| [计算方法详解](skill/references/calculation_methods.md) | 各方法公式与边界条件 |
 | [数据字段定义](skill/references/data_schema.md) | 全部 Excel/Markdown 字段说明 |
-| [交互示例](skill/references/interaction_examples.md) | 端到端对话示例 |
-| [边界案例](skill/references/interaction_scripts.md) | 8 种场景处理策略 |
-| [变更记录](CHANGELOG.md) | 版本更新历史 |
+| [交互示例](skill/references/interaction_examples.md) | 端到端对话流程 |
+| [边界案例](skill/references/interaction_scripts.md) | 8 种场景的处理策略 |
+| [变更记录](CHANGELOG.md) | 版本历史 |
 
-## 开源协议
+---
 
-[MIT License](LICENSE) — 自由使用、修改、分发
+## 协议
+
+[MIT License](LICENSE)
 
 ---
 
 <div align="center">
 
-如果这个项目对你有帮助，欢迎 Star 支持
+如果这个项目对你有帮助，欢迎 ⭐ Star 支持
 
 </div>

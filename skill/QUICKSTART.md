@@ -1,11 +1,15 @@
 # 学业追踪工具 — AI 助手快速指南
 
-> 本文件是给 AI 助手（豆包、ChatGPT、Claude 等）阅读的指令文档。
+> 本文件是给 AI 助手（豆包、元宝、ChatGPT、Claude 等）阅读的指令文档。
 > 用户发给你本文件内容或本文件路径后，你按照下面的流程操作。
 
-**豆包 Office Task 模式注意**：豆包 Python 沙箱不支持 shell 管道和 heredoc。在豆包中运行脚本时，使用两种替代方式：
-- **方案一（推荐）**：`from record_exam import run; run({...})` 直接导入模块调用
-- **方案二**：`python record_exam.py --json-file data.json` 通过文件传参（脚本支持 `--json-file` 和 `--output` 参数）
+**平台适配速查**：操作前先确认当前环境类型，加载对应的适配规则——
+
+- **豆包 Office Task 模式**：`skill/DOUBAO_PROMPT.md` — Python 沙箱，不支持 shell 管道和 heredoc。
+  使用替代方案：`from record_exam import run; run({...})` 直接导入模块调用，或 `python record_exam.py --json-file data.json` 通过文件传参。
+- **元宝超级智能体**：`skill/YUANBAO_PROMPT.md` — 对话式智能体，有内置工具（代码执行、文件读写等）。
+  关键：用代码执行工具替用户运行脚本，通过文件传参（不支持管道），每条操作用户可见需展示进度。
+- **其他平台（ChatGPT/Claude 等）**：按通用流程执行，支持管道和文件两种方式。
 
 ——
 
@@ -15,6 +19,17 @@
 帮我部署运行这个项目：
 https://github.com/maybe-qy/study-tracker
 请先阅读 skill/QUICKSTART.md，然后帮我录入成绩
+```
+
+——
+
+**如果你在元宝 App 使用：** 复制下面这段话发送给元宝即可。元宝会自动部署项目并引导你录入成绩。
+
+```text
+帮我部署运行这个项目：
+https://github.com/maybe-qy/study-tracker
+请先阅读 skill/YUANBAO_PROMPT.md 了解适配规则，然后阅读 skill/QUICKSTART.md 了解流程。
+按流程引导我完成首次成绩录入。
 ```
 
 ——
@@ -138,6 +153,24 @@ echo '{
 python3 src/scripts/record_exam.py --json-file exam_data.json
 ```
 
+**元宝方式（代码执行工具）：** 用 Python 的 subprocess 模块调用，通过文件传参（不支持管道）：
+
+```python
+import json, subprocess
+
+# 1. 构造 JSON 数据
+data = {"workspace": ".", "exam_name": "11月期中", "exam_date": "2026-11", ...}
+with open("/tmp/exam_data.json", "w") as f:
+    json.dump(data, f)
+
+# 2. 运行脚本
+result = subprocess.run(
+    ["python3", "src/scripts/record_exam.py", "--json-file", "/tmp/exam_data.json"],
+    capture_output=True, text=True, cwd="study-tracker"
+)
+print(result.stdout)
+```
+
 <details>
 <summary>完整 JSON 字段参考（点击展开）</summary>
 
@@ -197,6 +230,23 @@ echo '{"workspace":".", ...}' | python3 src/scripts/calc_equivalent.py
 python3 src/scripts/calc_equivalent.py --json-file calc_input.json --output eq_result.json
 ```
 
+**元宝方式（代码执行工具）：**
+
+```python
+import json, subprocess
+
+calc_input = {"workspace": ".", ...}  # 从录入结果提取
+with open("/tmp/calc_input.json", "w") as f:
+    json.dump(calc_input, f)
+
+result = subprocess.run(
+    ["python3", "src/scripts/calc_equivalent.py",
+     "--json-file", "/tmp/calc_input.json", "--output", "/tmp/eq_result.json"],
+    capture_output=True, text=True, cwd="study-tracker"
+)
+print(result.stdout)
+```
+
 **必须执行这一步，不要跳过**。处理结果：
 
 - **status=ok**（有特控线或市排名）：继续执行第5步保存、第6步生成报告
@@ -228,11 +278,39 @@ python3 src/scripts/calc_equivalent.py --json-file calc_input.json --output eq_r
 python3 src/scripts/save_equivalent.py --json-file eq_result.json --workspace . --exam-name "11月期中" --exam-date "2026-11"
 ```
 
+**元宝方式（代码执行工具）：**
+
+```python
+import subprocess
+
+result = subprocess.run(
+    ["python3", "src/scripts/save_equivalent.py",
+     "--json-file", "/tmp/eq_result.json",
+     "--workspace", ".", "--exam-name", "11月期中", "--exam-date", "2026-11"],
+    capture_output=True, text=True, cwd="study-tracker"
+)
+print(result.stdout)
+```
+
 ### 第 6 步：生成报告（输出HTML文件，不是应用）
+
+**通用方式（终端/豆包沙箱）：**
 
 ```bash
 cd <项目目录>
 python3 src/scripts/generate_reports.py --workspace .
+```
+
+**元宝方式（代码执行工具）：**
+
+```python
+import subprocess
+
+result = subprocess.run(
+    ["python3", "src/scripts/generate_reports.py", "--workspace", "."],
+    capture_output=True, text=True, cwd="study-tracker"
+)
+print(result.stdout)
 ```
 
 脚本运行后会返回 JSON，其中 `files` 字段包含所有生成的报告路径。**向用户列出所有报告文件名**，但无需全部输出内容（详见下方输出策略）。
@@ -241,54 +319,44 @@ python3 src/scripts/generate_reports.py --workspace .
 
 | 文件名 | 内容 |
 |--------|------|
-| `个人档案.html` | 最新等效分、各科拆分、目标差距 |
-| `高考总分趋势.html` | 等效分时间序列、趋势方向、波动分析 |
-| `语文追踪.html` | 语文分数趋势 |
-| `数学追踪.html` | 数学分数趋势 |
-| `英语追踪.html` | 英语分数趋势 |
-| `{选科1名称}追踪.html` | 第一门选科分数趋势 |
-| `{选科2名称}追踪.html` | 第二门选科分数趋势 |
-| `{选科3名称}追踪.html` | 第三门选科分数趋势 |
+| `个人总览.html` | 双 Tab：个人档案（等效分、各科拆分、院校定位）+ 高考总分趋势（等效分时间序列、趋势方向、波动分析） |
+| `单科追踪.html` | 6 Tab：语文/数学/英语/选科 1/2/3 独立追踪，动态赋分计算 |
 
 告诉用户（示例）：
-"报告已全部生成，共8份，在 output/ 目录下。请用浏览器打开查看：
-- output/个人档案.html — 等效分和各科详情
-- output/高考总分趋势.html — 成绩趋势
-- output/数学追踪.html — 数学单科趋势
-- output/语文追踪.html — 语文单科趋势
-- output/英语追踪.html — 英语单科趋势
-- output/物理追踪.html — 物理单科趋势
-- output/化学追踪.html — 化学单科趋势
-- output/技术追踪.html — 技术单科趋势"
+"报告已全部生成，在 output/ 目录下。请用浏览器打开查看：
+- output/个人总览.html — 等效分、趋势、院校定位（Tab 整合）
+- output/单科追踪.html — 各科分数追踪（Tab 整合）"
 
 **不要**：启动Web服务器、构建前端应用、创建交互式界面、使用任何框架。HTML文件用浏览器直接打开即可查看。
-**不要**：只告诉用户一个文件。每次生成报告都会产生全部8份HTML文件，必须全部告知用户。
+**不要**：只告诉用户一个文件。每次生成报告都会产生全部2份HTML文件，必须全部告知用户。
 
 ### ⚠️ 关键：用户必须能看到报告文件
 
 报告文件生成在 `output/` 目录后，**用户无法直接访问你的云端文件系统**。你必须用以下方式让用户拿到报告：
 
 **输出策略（重要）**：
-8份HTML文件内容太长，无法全部输出。按以下优先级输出：
+2份HTML文件内容各自独立，按以下策略输出：
 
-1. **只完整输出 `output/个人档案.html` 一份**（最重要，包含等效分、各科拆分、目标差距）
+1. **优先完整输出 `output/个人总览.html` 一份**（最重要，包含等效分、各科拆分、趋势、院校定位）
    - 读取该文件的完整内容
    - 用代码块输出给用户：
    ```
-   这是你最重要的【个人档案】报告，复制以下全部内容，保存为 个人档案.html，用浏览器打开：
+   这是你最重要的【个人总览】报告，复制以下全部内容，保存为 个人总览.html，用浏览器打开：
    \`\`\`html
    （文件完整内容，不要省略，不要截断）
    \`\`\`
    ```
 
-2. **其余7份报告只告知文件名**，告诉用户：
-   "另外还有7份报告（高考总分趋势、各科追踪），因内容较长无法全部展示。如需查看，可以再次让我逐个输出。"
+2. **`单科追踪.html` 告知文件名**，告诉用户：
+   "另外还有一份单科追踪.html，包含各科分数趋势，如需查看可以让我输出。"
 
-3. **如果平台支持文件下载**：把所有 .html 文件作为附件发送，无需输出代码。
+3. **如果平台支持文件下载**：把所有 .html 文件作为附件发送，无需输出代码。**元宝模式下，优先使用文件下载功能**（如果有），让用户直接下载 HTML 文件。
+
+**元宝专属提示**：如果元宝有文件下载工具，直接用工具提供报告文件下载链接给用户，无需输出 HTML 代码块。如果元宝没有文件下载功能，就按上述策略输出 HTML 代码块。
 
 **绝对不要**：
 - 只说"文件在 output/ 目录下，用浏览器打开"——用户无法访问你的文件系统
-- 试图一次性输出全部8份HTML——内容太长会被截断
+- 试图一次性输出全部HTML——内容太长会被截断
 - 输出不完整的HTML——必须输出完整内容，用户才能保存使用
 
 ## 报告说明
@@ -297,9 +365,8 @@ python3 src/scripts/generate_reports.py --workspace .
 
 | 报告 | 文件名 | 内容 |
 |------|--------|------|
-| 个人档案 | `个人档案.html` | 最新等效分、各科拆分、目标差距 |
-| 总分趋势 | `高考总分趋势.html` | 等效分时间序列、趋势方向、波动分析 |
-| 单科追踪 | `{科目名}追踪.html` | 每科分数趋势 |
+| 个人总览 | `个人总览.html` | 双 Tab：个人档案（等效分、各科拆分、院校定位）+ 高考总分趋势（等效分时间序列、趋势方向、波动分析） |
+| 单科追踪 | `单科追踪.html` | 6 Tab：语文/数学/英语/选科 1/2/3 独立追踪，动态赋分计算 |
 
 **首次录入（1次考试）**：个人档案会显示"基准分已建立"，提示再录1次即可看趋势。
 **2次以上**：趋势报告显示上升/下降方向。
