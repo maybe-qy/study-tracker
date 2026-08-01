@@ -1,6 +1,6 @@
 [project]
 name = "study-tracker"
-version = "4.1.0"
+version = "5.0.0"
 description = "面向高中学生的学业追踪与等效分计算工具（浙江新高考）"
 requires-python = ">=3.9"
 license = {text = "MIT"}

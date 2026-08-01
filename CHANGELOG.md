@@ -1,5 +1,42 @@
 # Changelog
 
+## 2026-08-01 — v5.0.0 方法族重构 + 报告 8→2 Tab 化整合
+
+### 架构重构
+- **方法族架构**：从 8 独立方法重构为 3 方法族 + 1 独立方法，每族仅派一个胜出者参与融合
+  - 族① 校内划线换算（1A1B 二选一）
+  - 族② 外部参考映射（2A 三选一）
+  - 族③ 校内排名映射（二选一）
+  - 方法④ 单科排名对照法（独立）
+- **报告整合**：8 个独立报告 → 2 个 Tab 式报告
+  - 个人总览.html（Tab×2：个人档案 + 高考总分趋势）
+  - 单科追踪.html（Tab×6：6 科整合）
+
+### 功能变更
+- **跨次回退折扣固定为 0.9**：删除动态折扣逻辑，所有跨次数据统一使用 0.9 折扣
+- **废弃校排名估算方法**：彻底删除 method_school_estimate 相关代码
+- **删除双模块换算法 C 级路径**：仅保留 A/B 级路径
+
+### Bug 修复
+- 全盘扫描修复 10 个 bug（1 critical, 4 major, 5 minor）
+  - Critical: method_school_subject_lookup for-else continue 导致 NameError
+  - Major: 选科 sheet key 不匹配导致数据丢失
+  - Major: sigma 显示双倍"分"后缀
+  - Major: excel_utils.load_workbook 无异常保护
+  - Major: read_school_subject_data float(val) 无异常保护
+
+### 文档更新
+- README.md 全面更新：方法族架构、Tab 报告、新截图说明
+- 版本号从 4.1.0 → 5.0.0
+
+### 测试
+- 全部测试通过（含方法族架构适配）
+
+### 已删除文件
+- `src/assets/report_personal.html`（合并为个人总览 Tab）
+- `src/assets/report_trend.html`（合并为个人总览 Tab）
+- `src/assets/report_subject.html`（合并为单科追踪 Tab）
+
 ## 2026-07-28 — v4.1.0 架构重构：完整性与一体性
 
 ### 重构
