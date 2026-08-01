@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>个人总览 — 学业追踪报告</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, "Microsoft YaHei", sans-serif; background: #f5f7fa; color: #2c3e50; line-height: 1.6; padding: 20px; }
+  .card { max-width: 800px; margin: 0 auto; background: #fff; border-radius: 12px; padding: 32px; box-shadow: 0 2px 12px rgba(0,0,0,.08); }
+  h1 { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+  .date { font-size: 13px; color: #94a3b8; margin-bottom: 24px; }
+
+  /* ── Tabs ── */
+  .tabs { display: flex; gap: 0; border-bottom: 2px solid #e2e8f0; margin-bottom: 24px; }
+  .tab-btn { padding: 10px 20px; font-size: 14px; font-weight: 500; color: #94a3b8; background: none; border: none; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.15s; }
+  .tab-btn:hover { color: #64748b; }
+  .tab-btn.active { color: #1e40af; border-bottom-color: #1e40af; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* ── Personal ── */
+  .score-block { display:flex;align-items:center;gap:32px;padding:20px 0;text-align:left;padding-left:10%; border-bottom: 1px solid #e2e8f0; }
+  .score-label { font-size: 14px; color: #64748b; margin-bottom: 4px; }
+  .score-value { font-size: 56px; font-weight: 700; color: #1e40af; }
+  .score-meta { font-size: 14px; color: #64748b; margin-top: 4px; }
+  .score-meta .confidence { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+  .confidence-A { background: #dcfce7; color: #166534; }
+  .confidence-B { background: #fef9c3; color: #854d0e; }
+  .confidence-C { background: #f3f4f6; color: #6b7280; }
+  .confidence-D { background: #fef2f2; color: #991b1b; }
+  .error-range { font-size: 13px; color: #94a3b8; margin-top: 8px; }
+  .section { padding: 16px 0; border-bottom: 1px solid #f1f5f9; }
+  .section:last-child { border-bottom: none; }
+  .section-title { font-size: 14px; font-weight: 600; color: #475569; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; font-size: 14px; }
+  .stat-label { color: #64748b; }
+  .stat-value { font-weight: 500; }
+  .stat-value.positive { color: #16a34a; }
+  .stat-value.negative { color: #dc2626; }
+  .trend-up { color: #16a34a; }
+  .trend-down { color: #dc2626; }
+  .trend-flat { color: #f59e0b; }
+  .archive-card { background: #f8fafc; border-radius: 8px; padding: 12px 16px; margin-top: 8px; }
+  .archive-card .hint { font-size: 11px; color: #94a3b8; margin-bottom: 4px; }
+  .archive-card .info { font-size: 14px; color: #475569; }
+  .subj-conf { display: inline-block; padding: 1px 5px; border-radius: 3px; font-size: 10px; font-weight: 600; }
+  .subj-conf-A { background: #dcfce7; color: #166534; }
+  .subj-conf-B { background: #fef9c3; color: #854d0e; }
+  .subj-conf-C { background: #f3f4f6; color: #6b7280; }
+  .subj-conf-D { background: #fef2f2; color: #991b1b; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+  th { text-align: left; padding: 8px 10px; border-bottom: 2px solid #e2e8f0; color: #64748b; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+  td { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; }
+  .sum-row td { font-weight: 600; border-top: 2px solid #e2e8f0; }
+
+  /* ── Trend ── */
+  .trend-table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px; table-layout: fixed; }
+  .trend-table th { text-align: left; padding: 10px 12px; border-bottom: 2px solid #e2e8f0; color: #64748b; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .trend-table th:nth-child(1) { width: 16%; }
+  .trend-table th:nth-child(2) { width: 30%; }
+  .trend-table th:nth-child(3) { width: 14%; }
+  .trend-table th:nth-child(4) { width: 12%; }
+  .trend-table th:nth-child(5) { width: 22%; }
+  .trend-table th:nth-child(6) { width: 6%; }
+  .trend-table td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; }
+  .score-A { color: #166534; }
+  .score-B { color: #3b82f6; }
+  .score-C { color: #f59e0b; }
+  .score-D { color: #94a3b8; }
+  .method-switch-badge { font-size: 11px; cursor: help; color: #f59e0b; }
+  .detail-row { display: none; }
+  .toggle-arrow { cursor: pointer; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; vertical-align: middle; flex-shrink: 0; }
+  .toggle-arrow svg { display: none; }
+  .toggle-arrow svg.show { display: block; }
+  .cross-validation { font-size: 13px; color: #64748b; margin-top: 8px; padding: 8px 12px; background: #f8fafc; border-radius: 6px; }
+
+  details { margin-top: 24px; }
+  summary { font-size: 13px; color: #94a3b8; cursor: pointer; }
+  .disclaimer { font-size: 12px; color: #94a3b8; margin-top: 12px; padding: 12px; background: #f8fafc; border-radius: 6px; white-space: pre-line; line-height: 1.8; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>个人总览</h1>
+  <div class="date">{{ generated_at }}</div>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="personal">个人档案</button>
+    <button class="tab-btn" data-tab="trend">总分趋势</button>
+  </div>
+
+  <!-- ═══ 个人档案 Tab ═══ -->
+  <div class="tab-content active" id="tab-personal">
+    <div class="score-block">
+      <div style="flex:0 0 auto;">
+        <div class="score-label">等效高考分</div>
+        <div class="score-value">{{ equivalent_score }}</div>
+        <div class="score-meta">
+          <span class="confidence confidence-{{ confidence|default('B') }}">{{ confidence }}级置信度</span>
+          · {{ method }}
+        </div>
+        <div class="error-range">误差区间 [{{ error_lower }}, {{ error_upper }}]</div>
+      </div>
+      {% if tier_info and tier_info.target_university %}
+      <div style="flex-shrink:0;border-left:1px solid #e8ecf1;padding-left:40px;margin-right:8%;">
+        {% if tier_info.target_logo %}<img src="{{ tier_info.target_logo }}" style="width:250px;height:250px;border-radius:14px;box-shadow:0 2px 12px rgba(0,0,0,.06);display:block;">{% endif %}
+      </div>
+      {% endif %}
+    </div>
+
+    {% if calc_detail %}
+    <details style="margin-bottom:16px;">
+      <summary style="font-size:13px;color:#64748b;cursor:pointer;">查看计算过程</summary>
+      <div style="font-size:12px;color:#94a3b8;line-height:1.8;margin-top:8px;padding:8px 12px;background:#f8fafc;border-radius:6px;">
+        {% for part in calc_detail.split('|') %}
+        {% set p = part.strip() %}
+        {% if p %}
+        <div>{{ p }}</div>
+        {% endif %}
+        {% endfor %}
+      </div>
+    </details>
+    {% endif %}
+
+    {% if subject_scores %}
+    <div class="section">
+      <div class="section-title">各科等效分</div>
+      <table>
+        <thead>
+          <tr>
+            <th>科目</th>
+            <th>等效分</th>
+            <th>置信度</th>
+            <th>方法</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% set ns = namespace(total=0) %}
+          {% for s in subject_scores %}
+          {% if s.score is not none %}
+          {% set ns.total = ns.total + (s.score if s.score else 0) %}
+          <tr>
+            <td>{{ s.subject }}</td>
+            <td><strong>{{ "%.1f"|format(s.score) }}</strong></td>
+            <td><span class="subj-conf subj-conf-{{ s.confidence|default('B') }}">{{ s.confidence|default('B') }}级</span></td>
+            <td style="font-size:11px;color:#94a3b8;">{{ s.method|default('-') }}</td>
+          </tr>
+          {% endif %}
+          {% endfor %}
+          <tr class="sum-row">
+            <td>合计</td>
+            <td><strong>{{ "%.1f"|format(ns.total) }}</strong></td>
+            <td colspan="2" style="font-size:11px;color:#94a3b8;">{% if (ns.total - latest_equiv)|abs < 0.5 %}与等效总分一致{% else %}与等效总分偏差 {{ "%.1f"|format(ns.total - latest_equiv) }} 分{% endif %}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    {% if is_first_record %}
+    <div class="section" style="background:#f0fdf4;border-radius:8px;padding:16px;margin:8px 0;">
+      <div class="section-title" style="color:#166534;">✓ 基准分已建立</div>
+      <div style="font-size:14px;color:#475569;line-height:1.8;">
+        当前等效分 <strong>{{ equivalent_score }}</strong>（{{ confidence }}级置信度）<br>
+        再录入 1 次即可看到趋势方向<br>
+        再录入 3 次即可看到波动分析
+      </div>
+    </div>
+    {% endif %}
+
+    {% if has_analysis %}
+    <div class="section">
+      <div class="section-title">成绩状态</div>
+      <div class="stat-row">
+        <span class="stat-label">趋势方向</span>
+        <span class="stat-value trend-{{ trend_class }}">{{ trend_arrow }} {{ trend_text }}</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">预测状态</span>
+        <span class="stat-value">{{ prediction_state }}</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">浮动区间</span>
+        <span class="stat-value">[{{ volatility_lower }}, {{ volatility_upper }}]</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">波动幅度 (σ)</span>
+        <span class="stat-value">{{ sigma }}</span>
+      </div>
+      {% if volatility_style and volatility_style != "-" %}
+      <div class="stat-row">
+        <span class="stat-label">波动风格</span>
+        <span class="stat-value">{{ volatility_style }}</span>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% if tier_info %}
+    <div class="section">
+      <div class="section-title">院校定位</div>
+      {% if tier_info.target_university %}
+      <div class="stat-row">
+        <span class="stat-label">目标 {{ tier_info.target_university }}</span>
+        <span class="stat-value">{{ tier_info.target_line }} 分{% if tier_info.target_gap is not none %}（{% if tier_info.target_gap > 0 %}+{% endif %}{{ tier_info.target_gap }} 分）{% endif %}</span>
+      </div>
+      {% endif %}
+      {% if tier_info.current %}
+      <div style="background:#f0f7ff;border-radius:8px;padding:12px 16px;margin-bottom:8px;">
+        <div style="font-size:13px;color:#64748b;margin-bottom:2px;">当前梯队</div>
+        <div style="font-size:16px;font-weight:600;color:#1e40af;">{{ tier_info.current.name }}</div>
+        <div style="font-size:13px;color:#64748b;">{{ tier_info.current.threshold|int }} ~ {{ tier_info.current.upper|int }} 分</div>
+      </div>
+      {% if tier_info.next %}
+      <div class="stat-row">
+        <span class="stat-label">距上一级「{{ tier_info.next.name }}」</span>
+        <span class="stat-value" style="color:#f59e0b;">还差 {{ tier_info.next_gap|int }} 分</span>
+      </div>
+      {% endif %}
+      {% endif %}
+      {% if tier_info.current and tier_info.all_tiers %}
+      <details style="margin-top:8px;">
+        <summary style="font-size:12px;color:#94a3b8;cursor:pointer;">梯队一览</summary>
+        <div style="margin-top:8px;">
+          {% for t in tier_info.all_tiers %}
+          <div class="stat-row" style="font-size:12px;{% if t.is_current %}background:#fef9c3;border-radius:4px;padding:2px 6px;{% endif %}">
+            <span style="color:#64748b;">{{ t.scope }} · {{ t.name }}</span>
+            <span style="font-weight:500;">{{ t.threshold|int }}~{{ t.upper|int }}</span>
+          </div>
+          {% endfor %}
+        </div>
+      </details>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- ═══ 总分趋势 Tab ═══ -->
+  <div class="tab-content" id="tab-trend">
+    {% if exams %}
+    <table class="trend-table">
+      <thead>
+        <tr>
+          <th>日期</th>
+          <th>考试</th>
+          <th>等效分</th>
+          <th>置信度</th>
+          <th>方法</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for exam in exams %}
+        <tr>
+          <td>{{ exam.date }}</td>
+          <td>{{ exam.name }}</td>
+          <td><strong class="score-{{ exam.confidence|default('B') }}">{{ exam.score }}</strong></td>
+          <td><span class="confidence confidence-{{ exam.confidence|default('B') }}">{{ exam.confidence|default('B') }}级</span></td>
+          <td>{{ exam.method }}{% if exam.method_switch %} <span class="method-switch-badge" title="方法切换：从{{ exam.prev_method }}">⚠</span>{% endif %}</td>
+          <td>
+            {% if exam.calc_detail %}
+            <span class="toggle-arrow" data-target="detail-{{ loop.index }}"><svg class="arrow-right show" width="12" height="12" viewBox="0 0 12 12"><path d="M4.5 2.5 L8 6 L4.5 9.5" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round"/></svg><svg class="arrow-down" width="12" height="12" viewBox="0 0 12 12"><path d="M2.5 4.5 L6 8 L9.5 4.5" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round"/></svg></span>
+            {% endif %}
+          </td>
+        </tr>
+        {% if exam.calc_detail %}
+        <tr class="detail-row" id="detail-{{ loop.index }}">
+          <td colspan="6" style="padding:4px 12px 8px 12px;font-size:12px;color:#94a3b8;line-height:1.6;">
+            {% for part in exam.calc_detail.split('|') %}
+            {% set p = part.strip() %}
+            {% if p %}
+            <div style="margin-bottom:2px;">{{ p }}</div>
+            {% endif %}
+            {% endfor %}
+          </td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+
+    {% if is_first_record %}
+    <div class="section" style="background:#f0fdf4;border-radius:8px;padding:16px;margin:8px 0;">
+      <div class="section-title" style="color:#166534;">📊 首次记录已建立</div>
+      <div style="font-size:14px;color:#475569;line-height:1.8;">
+        再录入 1 次考试，这里会显示趋势方向（上升/下降/持平）<br>
+        再录入 3 次考试，还会解锁波动分析和预测状态
+      </div>
+    </div>
+    {% endif %}
+
+    {% if trend_text != "数据不足" and not is_first_record %}
+    <div class="section">
+      <div class="section-title">趋势判断</div>
+      <div class="stat-row">
+        <span class="stat-label">趋势方向</span>
+        <span class="stat-value trend-{{ trend_class }}">{{ trend_arrow }} {{ trend_text }}</span>
+      </div>
+      {% if has_analysis %}
+      <div class="stat-row">
+        <span class="stat-label">波动幅度 (σ)</span>
+        <span class="stat-value">{{ sigma }}{% if sigma != "-" %}分{% endif %}</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">浮动区间</span>
+        <span class="stat-value">[{{ volatility_lower }}, {{ volatility_upper }}]</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">标签分布</span>
+        <span class="stat-value">积极{{ labels.positive }}次 正常{{ labels.normal }}次 消极{{ labels.negative }}次</span>
+      </div>
+      {% if volatility_style and volatility_style != "-" %}
+      <div class="stat-row">
+        <span class="stat-label">波动风格</span>
+        <span class="stat-value">{{ volatility_style }}</span>
+      </div>
+      {% endif %}
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% if cross_validations %}
+    <div class="section">
+      <div class="section-title">交叉验证</div>
+      <div style="font-size:13px;color:#64748b;">
+        以下为其他总分方法对本考试等效分的独立估算（不参与融合，仅作参照）。
+        差异 = 交叉验证分 − 融合结果分。
+      </div>
+      {% for cv in cross_validations %}
+      <div class="stat-row">
+        <span class="stat-label">{{ cv.exam }} · {{ cv.method }}</span>
+        <span class="stat-value">{{ cv.score }}分
+          {% if cv.diff == "-" %}
+          <span style="color:#94a3b8;font-size:12px;">· 无差异</span>
+          {% else %}
+          <span style="color:{% if cv.diff.startswith('+') %}#16a34a{% else %}#dc2626{% endif %};font-size:12px;">
+            · 差异 {{ cv.diff }}分
+          </span>
+          {% endif %}
+        </span>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% else %}
+    <div class="section" style="text-align:center;padding:40px 0;color:#94a3b8;font-size:14px;">
+      暂无等效分记录，录入考试后自动生成趋势分析
+    </div>
+    {% endif %}
+  </div>
+
+  <details>
+    <summary>查看详细声明</summary>
+    <div class="disclaimer">{{ disclaimer }}</div>
+  </details>
+</div>
+<script>
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    this.classList.add('active');
+    document.getElementById('tab-' + this.dataset.tab).classList.add('active');
+  });
+});
+document.querySelectorAll('.toggle-arrow').forEach(arrow => {
+  arrow.addEventListener('click', function() {
+    const target = document.getElementById(this.dataset.target);
+    if (!target) return;
+    const open = target.style.display === 'table-row';
+    target.style.display = open ? 'none' : 'table-row';
+    this.querySelector('.arrow-right').classList.toggle('show', open);
+    this.querySelector('.arrow-down').classList.toggle('show', !open);
+  });
+});
+</script>
+</body>
+</html>

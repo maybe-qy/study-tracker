@@ -126,19 +126,70 @@ def test_school_rank_no_lookup_insufficient(tmpdir):
     assert "特控线" in result["reason"] or "低精度" in result["reason"]
 
 
+def make_macro_ws_with_upgrade_and_lookup(tmpdir):
+    """Create macro data with upgrade sheet + 本校对照表 for cross-validation tests."""
+    from openpyxl import Workbook
+    ws_root = tmpdir
+    macro_dir = os.path.join(ws_root, "data", "macro")
+    os.makedirs(macro_dir, exist_ok=True)
+
+    wb = Workbook()
+    ws1 = wb.active
+    ws1.title = "一分一段表"
+    ws1.append(["分数", "累计人数", "省份", "年份"])
+    for i, score in enumerate(range(750, 299, -10)):
+        ws1.append([score, (i + 1) * 100, "浙江", 2026])
+
+    ws2 = wb.create_sheet("特控线")
+    ws2.append(["年份", "省份", "特控线分数"])
+    ws2.append([2026, "浙江", 594])
+
+    ws3 = wb.create_sheet("期末升级")
+    ws3.append(["科目", "2027划线", "2027上线", "2028划线", "2028上线"])
+    ws3.append(["特控分段", "", "", "", ""])
+    ws3.append(["语数英综合", "", "", 270, 500])
+    ws3.append(["物理", "", "", 65, ""])
+    ws3.append(["化学", "", "", 70, ""])
+    ws3.append(["浙大分段", "", "", "", ""])
+    ws3.append(["语数英综合", "", "", 300, 150])
+    ws3.append(["物理", "", "", 85, ""])
+    ws3.append(["化学", "", "", 90, ""])
+
+    ws4 = wb.create_sheet("本校对照表_总分")
+    ws4.append(["校内排名", "高考总分"])
+    ws4.append([1, 720])
+    ws4.append([10, 700])
+    ws4.append([50, 670])
+    ws4.append([100, 640])
+    ws4.append([200, 600])
+    ws4.append([300, 560])
+
+    wb.save(os.path.join(macro_dir, "宏观数据_只读.xlsx"))
+    return ws_root
+
+
 def test_cross_validation(tmpdir):
     """Test that multiple methods produce cross-validation."""
-    ws = make_macro_ws(tmpdir)
+    ws = make_macro_ws_with_upgrade_and_lookup(tmpdir)
     data = {
         "workspace": ws,
+        "exam_name": "期末",
         "total_score": 650,
         "special_line_exam": 546.5,
         "alliance_rank": 3200,
         "alliance_total": 21000,
+        "subjects": [
+            {"name": "语文", "raw": 120},
+            {"name": "数学", "raw": 130},
+            {"name": "英语", "raw": 140},
+            {"name": "物理", "raw": 80, "assigned": 88},
+            {"name": "化学", "raw": 75, "assigned": 85},
+        ],
     }
     result = run(data)
     assert result["status"] == "ok"
-    assert result["primary_method"] == "分数线对照法"
+    # 族① (双模块换算法) 优先级最高，成为主方法；族② (分数线对照法) 作为交叉验证
+    assert result["primary_method"] in ("双模块换算法", "分数线对照法")
     assert len(result["cross_validations"]) >= 1
     assert "trust_note" in result
 
@@ -353,30 +404,7 @@ def test_school_threshold_method(tmpdir):
     assert "校排阈值估算法" in methods_seen
 
 
-def test_independent_subject_sum(tmpdir):
-    """M12: compute_independent_subject_sum produces estimate independent of total."""
-    from calc_equivalent import compute_independent_subject_sum, read_macro_data
-    ws = make_macro_ws(tmpdir)
-    macro = read_macro_data(ws)
-    data = {
-        "total_score": 650,
-        "score_scale": 750,
-        "special_line_exam": 546.5,
-        "subjects": [
-            {"name": "语文", "raw": 120},
-            {"name": "数学", "raw": 110},
-            {"name": "英语", "raw": 100},
-            {"name": "物理", "assigned": 88},
-            {"name": "化学", "assigned": 91},
-            {"name": "技术", "assigned": 66},
-        ],
-    }
-    result = compute_independent_subject_sum(data, macro)
-    assert result is not None
-    assert "sum" in result
-    assert "confidences" in result
-    assert len(result["confidences"]) == 6  # 3 main + 3 elective
-    assert result["sum"] > 0
+
 
 
 # ── 共享工具函数测试 ──

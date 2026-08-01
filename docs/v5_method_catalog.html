@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>study-tracker 方法全目录 — 待排序</title>
+<style>
+:root{color-scheme:light;--surface:#F7F7F8;--surface-muted:#EFEFF2;--text:#171717;--text-muted:#52525B;--border:rgba(23,23,23,0.12);--brand:#4B3FE3;--brand-soft:#F2F7FF;--brand-soft-strong:#E5EAFF;--brand-text:#1A1759;--brand-on:#FFF;--chart-series-1:#3C2ECA;--chart-series-2:#A9AEFF;--chart-series-3:#6F6FFF;--chart-series-4:#22A5F7;--chart-other:#D3D4DA;--accent:#27D2BF;--accent-2:#F87454;--accent-soft:#EAFBF8;--accent-text:#0F766E;--success:#1DC981;--warning:#EFAA17;--danger:#E8463A;--radius:8px;--radius-card:12px;--radius-full:999px;--spacer-4:4px;--spacer-8:8px;--spacer-12:12px;--spacer-16:16px;--spacer-20:20px;--spacer-24:24px;--font-sans:"SF Pro Text","PingFang SC",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--font-metric:"Inter","SF Pro Text","PingFang SC",system-ui;--font-mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;--weight-regular:400;--weight-medium:500;--weight-strong:600;--text-caption:12px/18px;--text-body:14px/20px;--text-title:16px/24px;--text-code:13px/20px}
+:root[data-widget-theme="dark"]{--surface:#171717;--surface-muted:#262626;--text:#E5E5E5;--text-muted:#A1A1AA;--border:rgba(229,229,229,0.12);--brand:#6054F1;--brand-soft:#1A1759;--brand-soft-strong:#3C2ECA;--brand-text:#CFD8FF;--chart-series-1:#4B3FE3;--accent-2:#F87454;--accent-soft:#123F3C;--accent-text:#CCFBF1}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;background:#f0f2f5;color:#1e293b;line-height:1.8}
+.container{max-width:960px;margin:0 auto;padding:40px 24px}
+h1{font-size:28px;font-weight:700;margin-bottom:4px;color:#0f172a}
+.subtitle{font-size:14px;color:#64748b;margin-bottom:32px}
+h2{font-size:22px;font-weight:600;margin:40px 0 16px;color:#1e40af;border-bottom:2px solid #bfdbfe;padding-bottom:8px}
+h3{font-size:17px;font-weight:600;margin:24px 0 12px;color:#1e293b}
+.card{background:#fff;border-radius:12px;padding:24px 28px;box-shadow:0 1px 4px rgba(0,0,0,.06);margin-bottom:16px}
+.card.highlight{border-left:4px solid #3b82f6}
+.card.warn{border-left:4px solid #f59e0b}
+.card.muted{background:#f8fafc;border:1px dashed #cbd5e1}
+table{width:100%;border-collapse:collapse;margin:8px 0;font-size:14px}
+th{text-align:left;padding:10px 14px;background:#f1f5f9;color:#475569;font-weight:600;font-size:13px;border-bottom:2px solid #e2e8f0}
+td{padding:10px 14px;border-bottom:1px solid #f1f5f9;vertical-align:top}
+tr:hover td{background:#f8fafc}
+.badge{display:inline-block;padding:2px 10px;border-radius:4px;font-size:12px;font-weight:600;margin-right:4px}
+.badge-a{background:#dcfce7;color:#166534}
+.badge-b{background:#fef9c3;color:#854d0e}
+.badge-c{background:#f3f4f6;color:#6b7280}
+.badge-d{background:#fef2f2;color:#991b1b}
+.tag{display:inline-block;padding:2px 8px;border-radius:3px;font-size:11px;font-weight:600;margin-right:4px}
+.tag-raw{background:#e0e7ff;color:#4338ca}
+.tag-derived{background:#fce7f3;color:#9d174d}
+.tag-sub{background:#fef3c7;color:#92400e}
+.tag-fallback{background:#f3f4f6;color:#6b7280}
+.code{font-family:"JetBrains Mono",monospace;font-size:13px;background:#f1f5f9;padding:1px 6px;border-radius:4px;color:#475569}
+.method-num{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:#1e40af;color:#fff;font-size:13px;font-weight:700;margin-right:8px;flex-shrink:0}
+.method-header{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.method-header .name{font-size:16px;font-weight:600}
+.method-header .func{font-size:12px;color:#94a3b8;font-family:monospace}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:8px 0}
+.detail-item{background:#f8fafc;border-radius:6px;padding:10px 14px;font-size:13px}
+.detail-item .label{color:#64748b;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.3px;margin-bottom:2px}
+.detail-item .value{color:#1e293b;font-weight:500}
+.summary-table td:first-child{font-weight:600;color:#475569;width:25%}
+.info-box{background:#eff6ff;border-radius:8px;padding:14px 18px;font-size:14px;color:#1e40af;margin:12px 0}
+.warn-box{background:#fffbeb;border-radius:8px;padding:14px 18px;font-size:14px;color:#92400e;margin:12px 0}
+.success-box{background:#f0fdf4;border-radius:8px;padding:14px 18px;font-size:14px;color:#166534;margin:12px 0}
+.divider{border:none;border-top:1px dashed #cbd5e1;margin:24px 0}
+.note{font-size:12px;color:#94a3b8;margin-top:4px}
+ul{padding-left:20px;margin:8px 0}
+li{margin:3px 0;font-size:14px}
+.flow-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:4px 0;font-size:13px}
+.flow-arrow{color:#94a3b8;font-size:16px}
+.flow-data{background:#e0e7ff;padding:2px 8px;border-radius:4px;font-size:12px;color:#4338ca}
+.flow-result{background:#dcfce7;padding:2px 8px;border-radius:4px;font-size:12px;color:#166534}
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>📋 study-tracker 方法全目录</h1>
+<div class="subtitle">所有小方法逐一列出，不做任何分组。请审查后告诉我：优先级排序、并列关系、置信度体系。</div>
+
+<div class="card highlight">
+  <strong>说明：</strong>下面列出当前系统中所有可用于计算等效分的方法。每个方法标明了数据来源、计算公式、当前置信度、精度边界。所有原始数据从 Excel 读取，所有输出的单位是"高考等效分(750分制)"。
+  方法编号 <strong>M01-M13</strong> 仅为索引，不代表优先级。
+</div>
+
+<!-- ════════════════════════════════════════════════ -->
+<h2>一、总分级方法（直接输出总等效分）</h2>
+<!-- ════════════════════════════════════════════════ -->
+
+<!-- M01 -->
+<div class="card">
+<div class="method-header"><span class="method-num">M01</span><span class="name">双模块换算法</span><span class="func">method_two_module()</span></div>
+<div class="detail-grid">
+  <div class="detail-item"><div class="label">数据来源</div><div class="value">校内升级Sheet：特控线分段 + 浙大线分段</div></div>
+  <div class="detail-item"><div class="label">当前置信度</div><div class="value"><span class="badge badge-a">A</span> 或 <span class="badge badge-b">B</span></div></div>
+  <div class="detail-item"><div class="label">精度边界</div><div class="value">±5分(A级) / ±10分(B级)</div></div>
+  <div class="detail-item"><div class="label">触发条件</div><div class="value">需语数英综合有特控线</div></div>
+</div>
+<p><strong>计算逻辑：</strong></p>
+<div class="flow-row">
+  <span>Module 1 语数英(450分)</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-data">校特控线/浙大线</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-data">比例插值</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-result">等效分</span>
+</div>
+<div class="flow-row">
+  <span>Module 2 各选科(100分)</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-data">各科独立划线</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-data">比例插值</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-result">等效分×N</span>
+</div>
+<div class="flow-row" style="color:#16a34a;font-weight:600;margin-top:4px;">
+  <span>总分 = 语数英等效 + 选科1等效 + 选科2等效 + 选科3等效</span>
+</div>
+<div class="note">内部还有 1A(有选科划线) / 1B(仅语数英划线) 两种子模式</div>
+</div>
+
+<!-- M02 -->
+<div class="card">
+<div class="method-header"><span class="method-num">M02</span><span class="name">分数线对照法（等比例放缩）</span><span class="func">method_score_line()</span></div>
+<div class="detail-grid">
+  <div class="detail-item"><div class="label">数据来源</div><div class="value">考试特控线 + 省级特控线历史数据</div></div>
+  <div class="detail-item"><div class="label">当前置信度</div><div class="value"><span class="badge badge-a">A</span></div></div>
+  <div class="detail-item"><div class="label">精度边界</div><div class="value">±5分</div></div>
+  <div class="detail-item"><div class="label">触发条件</div><div class="value">需知本次考试特控线(问老师)</div></div>
+</div>
+<p><strong>计算逻辑：</strong></p>
+<div class="flow-row">
+  <span class="flow-data">考试总分</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-data">(750-高考特控线)/(750-考试特控线)</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-data">等比例放缩</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-result">等效分</span>
+</div>
+<div class="note">使用高考特控线作为固定锚点，考试特控线作为浮动锚点，两点间线性插值</div>
+</div>
+
+<!-- M03 -->
+<div class="card">
+<div class="method-header"><span class="method-num">M03</span><span class="name">人数校准法</span><span class="func">method_population_calibration()</span></div>
+<div class="detail-grid">
+  <div class="detail-item"><div class="label">数据来源</div><div class="value">校内排名 + 校内特控线上线人数 + 高考特控线对应人数</div></div>
+  <div class="detail-item"><div class="label">当前置信度</div><div class="value"><span class="badge badge-b">B</span></div></div>
+  <div class="detail-item"><div class="label">精度边界</div><div class="value">±10分</div></div>
+  <div class="detail-item"><div class="label">触发条件</div><div class="value">需校内排名+门槛Sheet有特控线上线人数</div></div>
+</div>
+<p><strong>计算逻辑：</strong></p>
+<div class="flow-row">
+  <span class="flow-data">校内排名</span>
+  <span class="flow-arrow">×</span>
+  <span class="flow-data">k = 高考特控线人数/校内特控线上线人数</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-data">估算高考排名</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-data">查一分一段表</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-result">等效分</span>
+</div>
+<div class="note">核心假设：校内特控线上线人数与高考特控线对应人数的比例关系可校准排名</div>
+</div>
+
+<!-- M04 -->
+<div class="card">
+<div class="method-header"><span class="method-num">M04</span><span class="name">校排阈值估算法</span><span class="func">method_school_threshold()</span></div>
+<div class="detail-grid">
+  <div class="detail-item"><div class="label">数据来源</div><div class="value">升级Sheet（特控线/浙大线 + 对应上线人数）+ 学校总人数</div></div>
+  <div class="detail-item"><div class="label">当前置信度</div><div class="value"><span class="badge badge-b">B</span></div></div>
+  <div class="detail-item"><div class="label">精度边界</div><div class="value">±10分</div></div>
+  <div class="detail-item"><div class="label">触发条件</div><div class="value">需升级Sheet有特控线+浙大线+上线人数</div></div>
+</div>
+<p><strong>计算逻辑：</strong></p>
+<div class="flow-row">
+  <span class="flow-data">语数英分数</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-data">特控线~浙大线区间定位</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-data">估算校内排名</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-data">×学校类型系数</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-data">估算高考排名</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-data">查一分一段表</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-result">等效分</span>
+</div>
+<div class="note">与 M03 的区别：M03 用特控线上线人数直接校准，M04 用分数区间定位校内排名</div>
+</div>
+
+<!-- M05 -->
+<div class="card">
+<div class="method-header"><span class="method-num">M05</span><span class="name">校内排名对照法</span><span class="func">method_school_lookup()</span></div>
+<div class="detail-grid">
+  <div class="detail-item"><div class="label">数据来源</div><div class="value">本校对照表_总分 + 校内排名</div></div>
+  <div class="detail-item"><div class="label">当前置信度</div><div class="value"><span class="badge badge-a">A</span></div></div>
+  <div class="detail-item"><div class="label">精度边界</div><div class="value">±5分</div></div>
+  <div class="detail-item"><div class="label">触发条件</div><div class="value">需有本校对照表(排名→高考总分映射)</div></div>
+</div>
+<p><strong>计算逻辑：</strong></p>
+<div class="flow-row">
+  <span class="flow-data">校内排名</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-data">本校对照表查找</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-data">精确匹配/线性插值</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-result">等效分</span>
+</div>
+<div class="note">最直接的校内排名方法。对照表由学校历史数据构建，排名→高考总分直接映射</div>
+</div>
+
+<!-- M06 -->
+<div class="card">
+<div class="method-header"><span class="method-num">M06</span><span class="name">排名锚定法（百分位法）</span><span class="func">method_percentile()</span></div>
+<div class="detail-grid">
+  <div class="detail-item"><div class="label">数据来源</div><div class="value">全市排名+总人数 / 联盟排名+总人数 + 省级一分一段表</div></div>
+  <div class="detail-item"><div class="label">当前置信度</div><div class="value"><span class="badge badge-a">A</span></div></div>
+  <div class="detail-item"><div class="label">精度边界</div><div class="value">±5分</div></div>
+  <div class="detail-item"><div class="label">触发条件</div><div class="value">需有全市或联盟排名+总人数</div></div>
+</div>
+<p><strong>计算逻辑：</strong></p>
+<div class="flow-row">
+  <span class="flow-data">全市/联盟排名</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-data">百分位 = 1 - 排名/总人数</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-data">一分一段表定位</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-result">等效分</span>
+</div>
+<div class="note">取决于排名范围：全市排名比联盟排名更精确，联盟排名比校内排名更精确</div>
+</div>
+
+<!-- M07 -->
+<div class="card">
+<div class="method-header"><span class="method-num">M07</span><span class="name">校排名估算</span><span class="func">method_school_estimate()</span></div>
+<div class="detail-grid">
+  <div class="detail-item"><div class="label">数据来源</div><div class="value">校内排名+学校总人数+学校类型+一分一段表</div></div>
+  <div class="detail-item"><div class="label">当前置信度</div><div class="value"><span class="badge badge-c">C</span></div></div>
+  <div class="detail-item"><div class="label">精度边界</div><div class="value">±15分</div></div>
+  <div class="detail-item"><div class="label">触发条件</div><div class="value">无对照表时，仅校排名+总人数可用</div></div>
+</div>
+<p><strong>计算逻辑：</strong></p>
+<div class="flow-row">
+  <span class="flow-data">校内排名/总人数</span>
+  <span class="flow-arrow">×</span>
+  <span class="flow-data">学校类型系数(省重点0.3~普通1.5)</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-data">估算全市排名</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-data">查一分一段表</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-result">等效分</span>
+</div>
+<div class="note">精度最低的总分方法，学校类型系数是经验值，误差大</div>
+</div>
+
+<!-- M08 -->
+<div class="card">
+<div class="method-header"><span class="method-num">M08</span><span class="name">单科排名对照法</span><span class="func">method_school_subject_lookup()</span></div>
+<div class="detail-grid">
+  <div class="detail-item"><div class="label">数据来源</div><div class="value">各科单科对照表 + 各科校内排名</div></div>
+  <div class="detail-item"><div class="label">当前置信度</div><div class="value"><span class="badge badge-a">A</span></div></div>
+  <div class="detail-item"><div class="label">精度边界</div><div class="value">±5分</div></div>
+  <div class="detail-item"><div class="label">触发条件</div><div class="value">需有单科对照表+各科校内排名</div></div>
+</div>
+<p><strong>计算逻辑：</strong></p>
+<div class="flow-row">
+  <span class="flow-data">选科1校内排名</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-data">物理对照表查</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-result">等效分1</span>
+</div>
+<div class="flow-row">
+  <span class="flow-data">选科2校内排名</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-data">化学对照表查</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-result">等效分2</span>
+</div>
+<div class="flow-row">
+  <span class="flow-data">选科3校内排名</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-data">技术对照表查</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-result">等效分3</span>
+</div>
+<div class="flow-row" style="color:#16a34a;font-weight:600;margin-top:4px;">
+  <span>总分 = 各科等效分之和（单独输出，不包含语数英）</span>
+</div>
+<div class="note">只输出选科等效分，语数英需另外计算。可与任意总分方法配合</div>
+</div>
+
+<hr class="divider">
+
+<!-- ════════════════════════════════════════════════ -->
+<h2>二、单科级方法（计算单科等效分）</h2>
+<!-- ════════════════════════════════════════════════ -->
+
+<!-- M09 -->
+<div class="card">
+<div class="method-header"><span class="method-num">M09</span><span class="name">赋分直映法</span><span class="func">赋分直接作为等效分</span></div>
+<div class="detail-grid">
+  <div class="detail-item"><div class="label">数据来源</div><div class="value">考试赋分（全省统一换算）</div></div>
+  <div class="detail-item"><div class="label">当前置信度</div><div class="value"><span class="badge badge-a">A</span></div></div>
+  <div class="detail-item"><div class="label">精度边界</div><div class="value">±5分</div></div>
+  <div class="detail-item"><div class="label">触发条件</div><div class="value">选科有赋分数据</div></div>
+</div>
+<p><strong>计算逻辑：</strong></p>
+<div class="flow-row">
+  <span class="flow-data">选科赋分</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-result">直接作为等效分</span>
+</div>
+<div class="note">赋分本身就是全省排名换算结果，是最精确的单科参考。仅适用于选科，语数英无赋分。</div>
+</div>
+
+<!-- M10 -->
+<div class="card">
+<div class="method-header"><span class="method-num">M10</span><span class="name">跨次回退法</span><span class="func">_find_previous_subject_data()</span></div>
+<div class="detail-grid">
+  <div class="detail-item"><div class="label">数据来源</div><div class="value">历史考试记录（成绩总表.xlsx）</div></div>
+  <div class="detail-item"><div class="label">当前置信度</div><div class="value"><span class="badge badge-c">C</span></div></div>
+  <div class="detail-item"><div class="label">精度边界</div><div class="value">±15分</div></div>
+  <div class="detail-item"><div class="label">触发条件</div><div class="value">本次无该科数据，历史有记录</div></div>
+</div>
+<p><strong>计算逻辑：</strong></p>
+<div class="flow-row">
+  <span class="flow-data">上次该科分数</span>
+  <span class="flow-arrow">×</span>
+  <span class="flow-data">折扣系数(当前0.85^n, 待改固定0.9)</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-result">等效分</span>
+</div>
+<div class="note">纯回退方法，不产生新数据，仅复用历史。精度取决于考试间隔和成绩稳定性</div>
+</div>
+
+<!-- M11 -->
+<div class="card">
+<div class="method-header"><span class="method-num">M11</span><span class="name">比例折算法</span><span class="func">compute_subject_equivalents() 内部</span></div>
+<div class="detail-grid">
+  <div class="detail-item"><div class="label">数据来源</div><div class="value">总等效分 - 选科贡献 = 剩余额度</div></div>
+  <div class="detail-item"><div class="label">当前置信度</div><div class="value"><span class="badge badge-b">B</span></div></div>
+  <div class="detail-item"><div class="label">精度边界</div><div class="value">±10分</div></div>
+  <div class="detail-item"><div class="label">触发条件</div><div class="value">语数英原始分齐全</div></div>
+</div>
+<p><strong>计算逻辑：</strong></p>
+<div class="flow-row">
+  <span class="flow-data">总等效分 - 选科等效总和</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-data">剩余额(语数英应得)</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-data">按语数英原始分比例分配</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-result">各科等效分</span>
+</div>
+<div class="note">不是独立方法，是总分确定后向各科分配的手段。保证各科加总=总分</div>
+</div>
+
+<!-- M12 -->
+<div class="card">
+<div class="method-header"><span class="method-num">M12</span><span class="name">均分估算法</span><span class="func">compute_subject_equivalents() 内部</span></div>
+<div class="detail-grid">
+  <div class="detail-item"><div class="label">数据来源</div><div class="value">总等效分剩余额度</div></div>
+  <div class="detail-item"><div class="label">当前置信度</div><div class="value"><span class="badge badge-c">C</span></div></div>
+  <div class="detail-item"><div class="label">精度边界</div><div class="value">±15分</div></div>
+  <div class="detail-item"><div class="label">触发条件</div><div class="value">语数英中某科无原始分</div></div>
+</div>
+<p><strong>计算逻辑：</strong></p>
+<div class="flow-row">
+  <span class="flow-data">剩余额度 / 语数英科目数</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-result">各科均分等值</span>
+</div>
+<div class="note">纯兜底，精度最低。只在语数英某科缺原始分时使用</div>
+</div>
+
+<!-- M13 -->
+<div class="card">
+<div class="method-header"><span class="method-num">M13</span><span class="name">校内均值参照法</span><span class="func">compute_subject_equivalents() 内部</span></div>
+<div class="detail-grid">
+  <div class="detail-item"><div class="label">数据来源</div><div class="value">本校历届单科对照表</div></div>
+  <div class="detail-item"><div class="label">当前置信度</div><div class="value"><span class="badge badge-c">C</span></div></div>
+  <div class="detail-item"><div class="label">精度边界</div><div class="value">±15分</div></div>
+  <div class="detail-item"><div class="label">触发条件</div><div class="value">无赋分、无排名、有单科对照表</div></div>
+</div>
+<p><strong>计算逻辑：</strong></p>
+<div class="flow-row">
+  <span class="flow-data">单科对照表中所有排名对应分数的均值</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-result">作为该科等效分</span>
+</div>
+<div class="note">纯兜底。不知道具体排名，只能用学校历史均分作为参考</div>
+</div>
+
+<hr class="divider">
+
+<!-- ════════════════════════════════════════════════ -->
+<h2>三、数据来源一览</h2>
+<!-- ════════════════════════════════════════════════ -->
+
+<div class="card">
+<p style="margin-bottom:12px;">所有方法依赖的原始数据来源，按维度分类：</p>
+<table>
+  <thead>
+    <tr><th>数据维度</th><th>具体数据项</th><th>来源文件</th><th>被哪些方法使用</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>校内划线</strong></td>
+      <td>各科特控线、各科浙大线、各科上线人数</td>
+      <td>宏观数据_只读.xlsx → 升级Sheet</td>
+      <td>M01, M03, M04</td>
+    </tr>
+    <tr>
+      <td><strong>校内排名</strong></td>
+      <td>总分校内排名、各科校内排名、学校总人数</td>
+      <td>用户输入 + 成绩总表</td>
+      <td>M03, M04, M05, M07, M08</td>
+    </tr>
+    <tr>
+      <td><strong>本校对照表</strong></td>
+      <td>本校对照表_总分（排名→高考总分映射）</td>
+      <td>宏观数据_只读.xlsx</td>
+      <td>M05</td>
+    </tr>
+    <tr>
+      <td><strong>单科对照表</strong></td>
+      <td>各科单科对照表（排名→高考等效分映射）</td>
+      <td>宏观数据_只读.xlsx</td>
+      <td>M08, M13</td>
+    </tr>
+    <tr>
+      <td><strong>联盟排名</strong></td>
+      <td>联盟排名+联盟总人数</td>
+      <td>用户输入</td>
+      <td>M06</td>
+    </tr>
+    <tr>
+      <td><strong>全市排名</strong></td>
+      <td>全市排名+全市总人数</td>
+      <td>用户输入</td>
+      <td>M06</td>
+    </tr>
+    <tr>
+      <td><strong>省级参考</strong></td>
+      <td>一分一段表、特控线历史数据</td>
+      <td>宏观数据_只读.xlsx</td>
+      <td>M02, M03, M04, M06, M07</td>
+    </tr>
+    <tr>
+      <td><strong>考试赋分</strong></td>
+      <td>各选科赋分</td>
+      <td>用户输入</td>
+      <td>M09</td>
+    </tr>
+    <tr>
+      <td><strong>考试原始分</strong></td>
+      <td>各科原始分</td>
+      <td>用户输入</td>
+      <td>M01, M11, M12</td>
+    </tr>
+    <tr>
+      <td><strong>历史记录</strong></td>
+      <td>历史考试各科分数</td>
+      <td>成绩总表.xlsx</td>
+      <td>M10</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<hr class="divider">
+
+<!-- ════════════════════════════════════════════════ -->
+<h2>四、当前已有问题的总结</h2>
+<!-- ════════════════════════════════════════════════ -->
+
+<div class="card warn">
+<ol>
+  <li><strong>族② 三选一不合理</strong> — 校排名(M03/M04/M05/M07) 和 联盟排名(M06) 应该各自独立算分，不是只能选一个。多个排名数据同时存在时，每个都算一遍，交叉验证。</li>
+  <li><strong>置信度系统混乱</strong> — 当前A/B/C/D分级没有统一标准。有的方法因为数据来源好而置信度高（如M05对照表→A），但M06联盟排名也是A，M07校内排名估算却是C，同样是"排名"维度却不同级。</li>
+  <li><strong>校排名方法太多</strong> — M03/M04/M05/M07 四条方法都使用校内排名，但互相之间的关系不清晰（并列？选一？优先级？）。</li>
+  <li><strong>M08 单科排名对照法地位模糊</strong> — 它只输出选科等效分，不输出总分，不能直接和其他总分方法并列。</li>
+  <li><strong>M11/M12/M13 不是独立方法</strong> — 它们是在总分确定后分配各科的手段，不是产生新数据的计算方法。</li>
+</ol>
+</div>
+
+<hr class="divider">
+
+<!-- ════════════════════════════════════════════════ -->
+<h2>五、等待你决定的事项</h2>
+<!-- ════════════════════════════════════════════════ -->
+
+<div class="card highlight" style="font-size:15px;line-height:2;">
+  <p>请按以下顺序告诉我：</p>
+  <ol>
+    <li><strong>优先级排序</strong> — 把 M01~M13 按你想要的执行优先级排序（哪个方法算出来最优先采用？）</li>
+    <li><strong>并列关系</strong> — 哪些方法是"各算各的，都输出"（并列），哪些是"按优先级，第一个可用就选"（二选一/三选一）？</li>
+    <li><strong>校排名分组</strong> — 你说"校排名独立算一次分，作为新的一组"，具体是哪些方法归入校排名组？M03/M04/M05/M07 全归进去？还是只选部分？</li>
+    <li><strong>联盟排名分组</strong> — 联盟排名和全市排名是否合并为一组？还是各自独立？</li>
+    <li><strong>置信度系统</strong> — 重新定义置信度标准。比如：按数据来源的"广度"定级（省级>联盟>校内>个人）？还是按方法精度定级（对照表>比例>估算）？还是两者结合？</li>
+    <li><strong>其他</strong> — 你觉得还有哪些方法需要增减、合并、拆分？</li>
+  </ol>
+</div>
+
+<div style="text-align:center;margin-top:40px;color:#94a3b8;font-size:13px;">
+  方法全目录 v1 | 无任何预设分组 | 你决定架构
+</div>
+
+</div>
+</body>
+</html>

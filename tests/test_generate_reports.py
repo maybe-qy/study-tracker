@@ -205,8 +205,8 @@ def test_generate_reports_empty_workspace(tmpdir):
     setup_ws(ws)
     result = gen_reports(ws)
     assert result["status"] == "ok"
-    # 8 files should be generated (even if some are empty)
-    assert len(result["files"]) == 8
+    # 2 Tab-based files should be generated (even if some are empty)
+    assert len(result["files"]) == 2
 
 
 def test_generate_reports_with_data(tmpdir):
@@ -255,7 +255,7 @@ def test_generate_reports_with_data(tmpdir):
     # Generate reports
     result = gen_reports(ws)
     assert result["status"] == "ok"
-    assert len(result["files"]) == 8
+    assert len(result["files"]) == 2
 
     # Verify each file exists and has content
     for f in result["files"]:

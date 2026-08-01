@@ -1,19 +1,27 @@
 #!/usr/bin/env python3
-"""Calculate equivalent Gaokao score using all available methods.
+"""Calculate equivalent Gaokao score using method families.
 
-Priority order (fixed ranking, first available wins as primary):
-  1. 双模块换算法 (Two-module) — A/B级
-  2. 人数校准法 (Population calibration) — B级
-  3. 分数线对照法/等比例放缩法 (Score-line comparison) — A级
-  4. 校排阈值估算法 (School threshold estimation) — B级
-  5. 校内排名对照法 (School ranking lookup) — A级
-  6. 单科排名对照法 (School subject lookup) — A级
-  7. 排名锚定法 (Percentile anchoring) — A级，交叉验证
-  8. 校排名估算 (School rank estimation) — C级（低精度回退，不参与融合）
+架构：3 个方法族 + 1 个独立方法，各派一个胜出者参与加权融合
 
-Confidence is A/B/C/D four levels, determined by data source and method.
-All A/B-level methods participate in weighted fusion by confidence.
-C-level methods appear in cross-validations for transparency but are excluded from fusion.
+  族① 校内划线换算（1A1B 二选一）
+    Mode A: 双模块完整换算（语数英+选科独立划线）— A级
+    Mode B: 仅语数英划线 → 450→750等比例放大 — B级
+
+  族② 外部参考映射（2A 三选一）
+    Mode A1: 分数线对照法（有特控线）— A级
+    Mode A2: 排名锚定法（有全市/联盟排名）— A级
+    Mode A3: 校内排名对照法（有本校对照表）— A级
+
+  族③ 校内排名映射（三选一）
+    Mode A: 人数校准法（有门槛上线人数）— B级
+    Mode B: 阈值插值法（有升级Sheet阈值）— B级
+
+  方法④ 单科排名对照法（独立，A级）
+    有单科对照表 → 各科直接映射求和
+
+融合规则：≥2个可用 → 加权融合；仅1个 → 直接输出
+
+Confidence: A/B/C/D four levels, determined by data source and method.
 Weights (A=1.0, B=0.8, C=0.5, D=0).
 
 Input: JSON via stdin (or --json-file)
@@ -465,60 +473,6 @@ def method_percentile(data, macro):
     }
 
 
-def method_school_estimate(data, macro):
-    """优先级8: 校排名估算 — C级（低精度回退）.
-
-    仅校内排名、无本校对照表时使用。用学校类型系数估算全市排名，
-    再通过一分一段表百分位锚定得到等效分。
-
-    注意：此方法置信度为C级，被置信度门槛拦截（仅C级时返回insufficient_data），
-    但在有更高级方法时仍参与交叉验证以提供透明度。不参与加权融合。
-    """
-    school_rank = data.get("school_rank")
-    school_total = data.get("school_total")
-    if not school_rank or not school_total:
-        return None
-
-    sr = safe_int(school_rank)
-    st = safe_int(school_total)
-    if sr is None or st is None or st == 0:
-        return None
-
-    # 有对照表时应走 method_school_lookup
-    if macro.get("本校对照表_总分"):
-        return None
-
-    score_table = filter_score_table(macro.get("一分一段表", []))
-    if not score_table:
-        return None
-    max_count = max(int(r.get("累计人数", 0)) for r in score_table)
-    if max_count == 0:
-        return None
-
-    # 学校类型系数
-    school_type = data.get("school_type", "普通")
-    coeff = SCHOOL_TYPE_COEFF.get(school_type, 1.0)
-
-    estimated_city_rank = int(sr / st * max_count * coeff)
-    estimated_city_rank = min(estimated_city_rank, max_count)  # clamp to avoid percentile overflow
-    percentile = 1.0 - (estimated_city_rank / max_count)
-    percentile = max(0.0, min(1.0, percentile))  # clamp to [0, 1]
-
-    sorted_table = sorted(score_table, key=lambda r: int(r.get("分数", 0)), reverse=True)
-    target_count = int((1 - percentile) * max_count)
-    best_score = find_score_by_count(sorted_table, target_count)
-
-    if best_score is None:
-        return None
-
-    return {
-        "method": "校排名估算",
-        "score": round(best_score, 1),
-        "confidence": "C",
-        "detail": f"校内排名{school_rank}/{school_total}（{school_type or '未知类型'}）→ 估算全市排名~{estimated_city_rank} → 等效分{best_score:.0f}",
-    }
-
-
 def method_population_calibration(data, macro):
     """优先级2: 人数校准法 (Population calibration) — B级.
 
@@ -609,6 +563,57 @@ def method_population_calibration(data, macro):
         "score": round(best_score, 1),
         "confidence": "B",
         "detail": f"校内排名{school_rank}（含重点班校准{unexamined_top}人） × k({k:.1f}) → 高考排名{city_rank} → 等效分{best_score:.0f}",
+    }
+
+
+def method_school_cutoff(data, macro):
+    """族① 校内划线换算（1A1B 二选一）.
+
+    Mode A: 选科有独立划线 → 双模块完整换算（A级）
+    Mode B: 仅语数英划线 → 450→750等比例放大（B级）
+    """
+    cutoffs = load_upgrade_cutoffs(data)
+    if cutoffs is None:
+        return None
+
+    main_data = cutoffs.get("语数英综合", {})
+    if main_data.get("special") is None:
+        return None
+
+    # 检测是否有选科独立划线
+    has_subject_cutoffs = any(
+        cutoffs.get(name, {}).get("special") is not None
+        for name in ELECTIVE_SUBJECTS
+    )
+
+    if has_subject_cutoffs:
+        return method_two_module(data, macro)  # Mode A: A级
+    else:
+        return _cutoff_main_only_mode(data, cutoffs, main_data)  # Mode B: B级
+
+
+def _cutoff_main_only_mode(data, cutoffs, main_data):
+    """族① Mode B: 仅语数英划线 → 450→750 等比例放大（B级）.
+
+    当升级Sheet仅有语数英划线（无选科独立划线）时使用。
+    以语数英450分制成绩为基础，按比例放大到750分制。
+    """
+    student_main = compute_main_raw_sum(data)
+    sch_special = main_data["special"]
+
+    if student_main <= 0 or sch_special is None or sch_special <= 0:
+        return None
+
+    # 450→750 等比例放大
+    ratio = student_main / MAIN_FULL_SCORE
+    equivalent = ratio * FULL_SCORE
+
+    return {
+        "method": "校内划线换算（仅语数英放大）",
+        "score": round(equivalent, 1),
+        "confidence": "B",
+        "detail": (f"语数英{student_main:.0f}分（{MAIN_FULL_SCORE}分制）→ 等比例放大至{FULL_SCORE}分制"
+                   f" → 等效{equivalent:.1f}分（B级，以偏概全）"),
     }
 
 
@@ -752,12 +757,9 @@ def method_two_module(data, macro):
                 detail = (f"{name}{raw:.0f}分, 校特控{sub_cut['special']:.0f}(无浙大线)"
                           f" → 比例{ratio:.1%} → 等效{sub_eq:.1f}")
         elif sub_cut.get("special"):
-            # Below special line
-            ratio = raw / sub_cut["special"]
-            sub_eq = GK_SUB_SPECIAL * ratio
-            conf = "C"
-            detail = (f"{name}{raw:.0f}分, 低于校特控{sub_cut['special']:.0f}"
-                      f" → 比例{ratio:.1%} → 等效{sub_eq:.1f}")
+            # Below special line → 跳过，交给其他族处理
+            details.append(f"[{name}] 低于校特控{sub_cut['special']:.0f}分, 跳过")
+            continue
         else:
             # Priority 3: no school cutoff → try existing single-subject fallbacks
             assigned = subj.get("assigned")
@@ -771,8 +773,7 @@ def method_two_module(data, macro):
                 # Try cross-exam fallback
                 prev = _find_previous_subject_data(workspace, name, data.get("exam_name", ""))
                 if prev:
-                    n = prev.get("exams_skipped", 1)
-                    discount = round(CROSS_EXAM_DISCOUNT ** n, 3)
+                    discount = CROSS_EXAM_DISCOUNT  # 固定折扣
                     sub_eq = round(prev["score"] * discount, 1)
                     conf = "C"
                     detail = (f"{name}无校内划线, 回退至{prev['exam']}"
@@ -899,6 +900,40 @@ def method_school_threshold(data, macro):
         "confidence": "B",
         "detail": f"校内特控线{te_line:.0f}分(=第{te_rank}名), 浙大线{zd_line:.0f}分(=第{zd_rank}名) → 学生{student_450:.0f}分估算校内第{estimated_rank}名 → 等效{best_score:.0f}分",
     }
+
+
+def method_external_reference(data, macro):
+    """族② 外部参考映射（2A 三选一）.
+
+    Mode A1: 有特控线 → 分数线对照法（A级, 优先）
+    Mode A2: 有排名 → 排名锚定法（A级）
+    Mode A3: 有校排名+对照表 → 校内排名对照法（A级）
+    """
+    result = method_score_line(data, macro)
+    if result:
+        return result
+    result = method_percentile(data, macro)
+    if result:
+        return result
+    result = method_school_lookup(data, macro)
+    if result:
+        return result
+    return None
+
+
+def method_school_rank(data, macro):
+    """族③ 校内排名映射（三选一）.
+
+    Mode A: 有门槛上线人数 → 人数校准法（B级, 优先）
+    Mode B: 有升级Sheet阈值 → 阈值插值法（B级）
+    """
+    result = method_population_calibration(data, macro)
+    if result:
+        return result
+    result = method_school_threshold(data, macro)
+    if result:
+        return result
+    return None
 
 
 def method_school_subject_lookup(data, macro):
@@ -1062,8 +1097,7 @@ def compute_subject_equivalents(data, macro):
         # 无赋分：尝试跨次回退
         prev = _find_previous_subject_data(workspace, name, exam_name)
         if prev:
-            n = prev.get("exams_skipped", 1)
-            discount = round(CROSS_EXAM_DISCOUNT ** n, 3)
+            discount = CROSS_EXAM_DISCOUNT  # 固定折扣
             score = round(prev["score"] * discount, 1)
             discount_pct = f"{discount:.2f}"
             results.append({
@@ -1209,91 +1243,6 @@ def _find_previous_subject_data(workspace, subject_name, current_exam_name):
     return None
 
 
-def compute_independent_subject_sum(data, macro):
-    """Compute subject sum independently for fusion.
-
-    Uses 分数线对照法 for 语数英 (independent of primary total method)
-    and 赋分直映 for 选科. This produces an estimate that can diverge
-    from the total methods, making weighted fusion meaningful.
-
-    Returns dict {"sum": float, "confidences": [str]} or None.
-    """
-    subjects = data.get("subjects", [])
-    total_score = safe_float(data.get("total_score", 0), 0)
-    if total_score is None:
-        total_score = 0.0
-    special_line_exam = data.get("special_line_exam") or data.get("special_line")
-
-    if not subjects or not total_score:
-        return None
-
-    # 语数英: use 分数线对照法 (same formula as method_score_line)
-    main_raw = 0.0
-    for subj in subjects:
-        name = subj.get("name", "")
-        raw = subj.get("raw")
-        if name in MAIN_SUBJECTS and raw is not None and raw != "":
-            try:
-                main_raw += float(raw)
-            except (ValueError, TypeError):
-                pass
-
-    if main_raw <= 0:
-        return None
-
-    special_lines = filter_numeric_rows(macro.get("特控线", []), "特控线分数")
-    gaokao_sl, _ = find_latest_gaokao_special_line(special_lines)
-
-    if not gaokao_sl or not special_line_exam:
-        return None
-
-    sl_exam = safe_float(special_line_exam)
-    if sl_exam is None or sl_exam >= FULL_SCORE:
-        return None
-
-    # 分数线对照法 applied to total, then allocate 语数英 portion
-    if total_score >= FULL_SCORE:
-        total_via_sl = float(FULL_SCORE)
-    else:
-        total_via_sl = (FULL_SCORE - gaokao_sl) / (FULL_SCORE - sl_exam) * (total_score - sl_exam) + gaokao_sl
-
-    original_total = safe_float(data.get("_original_total_score", total_score), total_score)
-    if original_total is None:
-        original_total = total_score
-    main_ratio = main_raw / original_total if original_total else 0
-    main_eq = main_ratio * total_via_sl
-
-    # 选科: 赋分直映
-    subject_sum = main_eq
-    confidences = []
-    # 语数英 via 分数线对照法 → A级 (3 subjects, only if raw is valid)
-    for subj in subjects:
-        name = subj.get("name", "")
-        raw = subj.get("raw")
-        if name in MAIN_SUBJECTS and raw is not None and raw != "":
-            confidences.append("A")
-
-    for subj in subjects:
-        name = subj.get("name", "")
-        if name in MAIN_SUBJECTS:
-            continue
-        assigned = subj.get("assigned")
-        if assigned is not None and assigned != "":
-            assigned_f = safe_float(assigned)
-            if assigned_f is not None:
-                subject_sum += assigned_f
-                confidences.append("B")
-
-    if not confidences:
-        return None
-
-    subject_sum = round(subject_sum, 1)
-    if subject_sum > FULL_SCORE:
-        return None  # 超满分上限，不参与融合
-
-    return {"sum": subject_sum, "confidences": confidences}
-
-
 def run(data):
     workspace = os.path.abspath(data.get("workspace", "."))
 
@@ -1332,36 +1281,20 @@ def run(data):
 
     methods = []
 
-    # Try methods in priority order: two_module → population_calibration → score_line → school_threshold → school_lookup → school_subject_lookup → percentile → school_estimate
-    result = method_two_module(data, macro)
+    # 4 个族各派一个胜出者
+    result = method_school_cutoff(data, macro)          # 族① 1A1B
     if result:
         methods.append(result)
 
-    result = method_population_calibration(data, macro)
+    result = method_external_reference(data, macro)      # 族② 2A三选一
     if result:
         methods.append(result)
 
-    result = method_score_line(data, macro)
+    result = method_school_rank(data, macro)             # 族③ 三选一
     if result:
         methods.append(result)
 
-    result = method_school_threshold(data, macro)
-    if result:
-        methods.append(result)
-
-    result = method_school_lookup(data, macro)
-    if result:
-        methods.append(result)
-
-    result = method_school_subject_lookup(data, macro)
-    if result:
-        methods.append(result)
-
-    result = method_percentile(data, macro)
-    if result:
-        methods.append(result)
-
-    result = method_school_estimate(data, macro)
+    result = method_school_subject_lookup(data, macro)   # 方法④ 独立
     if result:
         methods.append(result)
 
@@ -1372,13 +1305,12 @@ def run(data):
         }
 
     # ── 置信度门槛：仅C级方法不可用 ──
-    # C级（校排名估算）误差±15分，跨度过大无决策价值
     # 需要至少一个A或B级方法才返回结果
     best_confidence = max(methods, key=lambda m: CONFIDENCE_ORDER.get(m["confidence"], 0))["confidence"]
     if best_confidence in ("C", "D"):
         return {
             "status": "insufficient_data",
-            "reason": "当前仅有低精度数据（校排名），等效分误差±15分无参考价值。"
+            "reason": "当前仅有低精度数据，等效分误差过大无参考价值。"
                       "请补充以下任一数据以获得可用结果：1）本次考试特控线（问老师）→A级(±5分)；"
                       "2）全市/联盟排名+总人数 →A级(±5分)。",
         }
@@ -1461,25 +1393,14 @@ def run(data):
     # 延迟计算：融合时仅算一次
     subject_scores = []
 
-    # ── 多方法加权融合 ──
-    # 融合公式：所有可用方法 + 单科加总按置信度权重加权平均
-    # 单科加总独立计算（语数英用分数线对照法，选科赋分直映），
-    # 不与总分法恒等，确保融合产生有意义的交叉校验
-    # 单科加总衰减因子 0.5，降低其在融合中的比重
-    independent_subj = compute_independent_subject_sum(data, macro)
-
+    # ── 多方法加权融合（纯族间独立） ──
+    # 融合池 = { 族①胜出者, 族②胜出者, 族③胜出者, 方法④结果 }
+    # 同族不重复，按置信度权重加权融合
     components = []  # [(score, weight, label), ...]
     for m in methods:
         w = CONFIDENCE_WEIGHTS.get(m["confidence"], 0)
-        if w > 0 and m["confidence"] in ("A", "B"):
+        if w > 0:
             components.append((m["score"], w, m["method"]))
-
-    if independent_subj:
-        subj_confs = independent_subj["confidences"]
-        subj_weights = [CONFIDENCE_WEIGHTS.get(c, 0) for c in subj_confs]
-        w_subject = (sum(subj_weights) / len(subj_weights) * SUBJECT_SUM_DECAY) if subj_weights else 0
-        if w_subject > 0:
-            components.append((independent_subj["sum"], w_subject, "单科加总"))
 
     if len(components) >= MIN_DATA_FOR_FUSION:
         weighted_sum = sum(s * w for s, w, _ in components)

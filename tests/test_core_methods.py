@@ -192,7 +192,9 @@ def test_error_range_a_level(tmpdir):
 
 
 def test_divergence_low(tmpdir):
-    """When methods agree within 3 points, trust_note should say '一致'."""
+    """When methods from different families, divergence should be one of low/medium/high."""
+    from calc_equivalent import run as calc_run
+    # Create macro with 一分一段表 + 特控线 + 升级 sheet + 本校对照表
     macro_dir = os.path.join(str(tmpdir), "data", "macro")
     os.makedirs(macro_dir, exist_ok=True)
     wb = Workbook()
@@ -204,17 +206,43 @@ def test_divergence_low(tmpdir):
     ws2 = wb.create_sheet("特控线")
     ws2.append(["年份", "省份", "特控线分数"])
     ws2.append([2026, "浙江", 594])
+    # 升级 sheet
+    ws3 = wb.create_sheet("期末升级")
+    ws3.append(["科目", "2027划线", "2027上线", "2028划线", "2028上线"])
+    ws3.append(["特控分段", "", "", "", ""])
+    ws3.append(["语数英综合", "", "", 270, 500])
+    ws3.append(["物理", "", "", 65, ""])
+    ws3.append(["化学", "", "", 70, ""])
+    ws3.append(["浙大分段", "", "", "", ""])
+    ws3.append(["语数英综合", "", "", 300, 150])
+    ws3.append(["物理", "", "", 85, ""])
+    ws3.append(["化学", "", "", 90, ""])
+    ws4 = wb.create_sheet("本校对照表_总分")
+    ws4.append(["校内排名", "高考总分"])
+    ws4.append([1, 720])
+    ws4.append([10, 700])
+    ws4.append([50, 670])
+    ws4.append([100, 640])
+    ws4.append([200, 600])
+    ws4.append([300, 560])
     wb.save(os.path.join(macro_dir, "宏观数据_只读.xlsx"))
 
-    # Use both special_line and alliance_rank to get 2 methods
     data = {
         "workspace": str(tmpdir),
+        "exam_name": "期末",
         "total_score": 650,
         "special_line_exam": 546.5,
         "alliance_rank": 3200,
         "alliance_total": 21000,
+        "subjects": [
+            {"name": "语文", "raw": 120},
+            {"name": "数学", "raw": 130},
+            {"name": "英语", "raw": 140},
+            {"name": "物理", "raw": 80, "assigned": 88},
+            {"name": "化学", "raw": 75, "assigned": 85},
+        ],
     }
-    result = run(data)
+    result = calc_run(data)
     assert result["status"] == "ok"
     assert result.get("divergence") is not None
     # divergence should be one of low/medium/high
@@ -340,6 +368,7 @@ class TestFilterNumericRows:
 
 def test_fusion_between_min_max(tmpdir):
     """Fused equivalent score should lie between min and max of component methods."""
+    from calc_equivalent import run as calc_run
     macro_dir = os.path.join(str(tmpdir), "data", "macro")
     os.makedirs(macro_dir, exist_ok=True)
     wb = Workbook()
@@ -351,16 +380,43 @@ def test_fusion_between_min_max(tmpdir):
     ws2 = wb.create_sheet("特控线")
     ws2.append(["年份", "省份", "特控线分数"])
     ws2.append([2026, "浙江", 594])
+    # 升级 sheet for 族①
+    ws3 = wb.create_sheet("期末升级")
+    ws3.append(["科目", "2027划线", "2027上线", "2028划线", "2028上线"])
+    ws3.append(["特控分段", "", "", "", ""])
+    ws3.append(["语数英综合", "", "", 270, 500])
+    ws3.append(["物理", "", "", 65, ""])
+    ws3.append(["化学", "", "", 70, ""])
+    ws3.append(["浙大分段", "", "", "", ""])
+    ws3.append(["语数英综合", "", "", 300, 150])
+    ws3.append(["物理", "", "", 85, ""])
+    ws3.append(["化学", "", "", 90, ""])
+    ws4 = wb.create_sheet("本校对照表_总分")
+    ws4.append(["校内排名", "高考总分"])
+    ws4.append([1, 720])
+    ws4.append([10, 700])
+    ws4.append([50, 670])
+    ws4.append([100, 640])
+    ws4.append([200, 600])
+    ws4.append([300, 560])
     wb.save(os.path.join(macro_dir, "宏观数据_只读.xlsx"))
 
     data = {
         "workspace": str(tmpdir),
+        "exam_name": "期末",
         "total_score": 650,
         "special_line_exam": 546.5,
         "alliance_rank": 3200,
         "alliance_total": 21000,
+        "subjects": [
+            {"name": "语文", "raw": 120},
+            {"name": "数学", "raw": 130},
+            {"name": "英语", "raw": 140},
+            {"name": "物理", "raw": 80, "assigned": 88},
+            {"name": "化学", "raw": 75, "assigned": 85},
+        ],
     }
-    result = run(data)
+    result = calc_run(data)
     assert result["status"] == "ok"
     assert len(result["method_details"]) >= 2
 
@@ -368,8 +424,7 @@ def test_fusion_between_min_max(tmpdir):
     min_score = min(scores)
     max_score = max(scores)
     fused = result["equivalent_score"]
-    # Fused score should be within the range of method scores (with small tolerance
-    # because independent subject sum can pull it slightly outside)
+    # Fused score should be within the range of method scores (with small tolerance)
     assert min_score - 20 <= fused <= max_score + 20
 
 

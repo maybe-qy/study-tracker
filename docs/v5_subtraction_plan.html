@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>study-tracker v5 减法方案</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; background: #f0f2f5; color: #1e293b; line-height: 1.8; }
+  .container { max-width: 900px; margin: 0 auto; padding: 40px 24px; }
+  h1 { font-size: 28px; font-weight: 700; margin-bottom: 8px; color: #0f172a; }
+  h2 { font-size: 22px; font-weight: 600; margin: 40px 0 16px; color: #1e40af; border-bottom: 2px solid #bfdbfe; padding-bottom: 8px; }
+  h3 { font-size: 18px; font-weight: 600; margin: 28px 0 12px; color: #1e293b; }
+  h4 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; color: #475569; }
+  .subtitle { font-size: 14px; color: #64748b; margin-bottom: 32px; }
+  .card { background: #fff; border-radius: 12px; padding: 24px 28px; box-shadow: 0 1px 4px rgba(0,0,0,.06); margin-bottom: 20px; }
+  .card.highlight { border-left: 4px solid #3b82f6; }
+  .card.warn { border-left: 4px solid #f59e0b; }
+  .card.success { border-left: 4px solid #16a34a; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px; }
+  th { text-align: left; padding: 10px 14px; background: #f1f5f9; color: #475569; font-weight: 600; font-size: 13px; border-bottom: 2px solid #e2e8f0; }
+  td { padding: 10px 14px; border-bottom: 1px solid #f1f5f9; }
+  tr:hover td { background: #f8fafc; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+  .badge-a { background: #dcfce7; color: #166534; }
+  .badge-b { background: #fef9c3; color: #854d0e; }
+  .badge-c { background: #f3f4f6; color: #6b7280; }
+  .badge-p0 { background: #fef2f2; color: #991b1b; }
+  .badge-p1 { background: #fff7ed; color: #9a3412; }
+  .badge-p2 { background: #fefce8; color: #713f12; }
+  .code-block { background: #1e293b; color: #e2e8f0; border-radius: 8px; padding: 16px 20px; font-family: "JetBrains Mono", "Fira Code", monospace; font-size: 13px; line-height: 1.7; overflow-x: auto; margin: 12px 0; white-space: pre; }
+  .code-block .step { color: #60a5fa; }
+  .code-block .result { color: #4ade80; font-weight: bold; }
+  .code-block .note { color: #94a3b8; }
+  .code-block .warn { color: #fbbf24; }
+  .calc-step { background: #f8fafc; border-left: 3px solid #3b82f6; padding: 12px 16px; margin: 8px 0; border-radius: 0 6px 6px 0; font-size: 14px; }
+  .calc-step .label { font-weight: 600; color: #1e40af; }
+  .calc-step .formula { font-family: monospace; color: #475569; margin: 4px 0; }
+  .calc-step .answer { font-weight: 700; color: #16a34a; }
+  .arrow { color: #94a3b8; margin: 0 4px; }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; margin-right: 4px; }
+  .tag-1a { background: #dbeafe; color: #1e40af; }
+  .tag-1b { background: #e0e7ff; color: #4338ca; }
+  .tag-2a { background: #dcfce7; color: #166534; }
+  .tag-3 { background: #fef9c3; color: #854d0e; }
+  .tag-4 { background: #f3f4f6; color: #6b7280; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+  .info-box { background: #eff6ff; border-radius: 8px; padding: 14px 18px; font-size: 14px; color: #1e40af; }
+  .warn-box { background: #fffbeb; border-radius: 8px; padding: 14px 18px; font-size: 14px; color: #92400e; }
+  .success-box { background: #f0fdf4; border-radius: 8px; padding: 14px 18px; font-size: 14px; color: #166534; }
+  .divider { border: none; border-top: 1px dashed #cbd5e1; margin: 32px 0; }
+  .scenario-input { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 16px 20px; margin: 12px 0; font-size: 14px; }
+  .scenario-input h5 { font-size: 14px; font-weight: 600; color: #0369a1; margin-bottom: 8px; }
+  .rollback { background: #fef3c7; border: 1px solid #fcd34d; border-radius: 8px; padding: 12px 16px; margin: 12px 0; font-size: 14px; }
+  .rollback h5 { font-size: 14px; font-weight: 600; color: #92400e; margin-bottom: 6px; }
+  ul { padding-left: 20px; margin: 8px 0; }
+  li { margin: 4px 0; font-size: 14px; }
+  .summary-table td:first-child { font-weight: 600; color: #475569; width: 30%; }
+  .toc { background: #fff; border-radius: 12px; padding: 20px 28px; box-shadow: 0 1px 4px rgba(0,0,0,.06); margin-bottom: 32px; }
+  .toc ol { padding-left: 20px; }
+  .toc li { margin: 6px 0; }
+  .toc a { color: #1e40af; text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>study-tracker v5 减法方案</h1>
+<div class="subtitle">基于用户反馈修订 | 2026-07-30 | 核心目标：方法架构精简 + 计算透明度提升</div>
+
+<div class="toc">
+  <ol>
+    <li><a href="#arch">方法架构总览（3族 + 1独立）</a></li>
+    <li><a href="#scenario1">场景一：期末考试（完整校内划线）— 含技术回滚 + 逐步计算</a></li>
+    <li><a href="#scenario2">场景二：月考（仅语数英划线）</a></li>
+    <li><a href="#scenario3">场景三：周测（仅校内排名）</a></li>
+    <li><a href="#checklist">减法清单（P0-P7）</a></li>
+    <li><a href="#roadmap">实施路线图</a></li>
+  </ol>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<h2 id="arch">一、方法架构总览</h2>
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<div class="card highlight">
+<p>将原有 <strong>8 个独立方法</strong> 精简为 <strong>3 个方法族 + 1 个独立方法</strong>，消除并列冗余，明确二选一关系。</p>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>方法族</th>
+      <th>名称</th>
+      <th>内部结构</th>
+      <th>触发条件</th>
+      <th>置信度</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><span class="tag tag-1a">族①</span></td>
+      <td>校内划线换算</td>
+      <td><strong>1A1B 二选一</strong><br>
+        1A: 双模块完整换算（语数英+选科各自独立划线）<br>
+        1B: 仅语数英划线 → 450→750 等比例放大</td>
+      <td>升级 Sheet 有校内划线数据</td>
+      <td><span class="badge badge-a">A</span> 或 <span class="badge badge-b">B</span></td>
+    </tr>
+    <tr>
+      <td><span class="tag tag-2a">族②</span></td>
+      <td>外部参考映射</td>
+      <td><strong>2A 三选一</strong><br>
+        2A-1: 分数线对照法（特控线锚点）<br>
+        2A-2: 人数校准法（校内排名→高考排名）<br>
+        2A-3: 百分位锚定法（全市/联盟排名）</td>
+      <td>有外部参考数据（特控线/排名）</td>
+      <td><span class="badge badge-a">A</span> 或 <span class="badge badge-b">B</span></td>
+    </tr>
+    <tr>
+      <td><span class="tag tag-3">族③</span></td>
+      <td>校内排名映射</td>
+      <td><strong>三选一</strong><br>
+        3-1: 校内排名对照法（有本校对照表）<br>
+        3-2: 校排阈值估算法（有升级Sheet人数）<br>
+        3-3: 校排名估算（无对照表，低精度）</td>
+      <td>有校内排名数据</td>
+      <td><span class="badge badge-a">A</span> / <span class="badge badge-b">B</span> / <span class="badge badge-c">C</span></td>
+    </tr>
+    <tr>
+      <td><span class="tag tag-4">方法④</span></td>
+      <td>单科排名对照法</td>
+      <td><strong>独立方法</strong><br>
+        各选科校内单科排名 → 对照表 → 等效分</td>
+      <td>有单科对照表 + 各科校内排名</td>
+      <td><span class="badge badge-a">A</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="card">
+<h4>族间关系</h4>
+<ul>
+  <li><strong>族① vs 族②</strong>：并列关系。族①基于校内划线（更精准），族②基于外部参考（更通用）。两者同时可用时，族①为优先主方法，族②参与交叉验证。</li>
+  <li><strong>族①内部 1A/1B</strong>：二选一。有选科独立划线 → 1A（A级）；仅语数英划线 → 1B（B级，等比例放大）。</li>
+  <li><strong>族②内部三选一</strong>：按精度排序，2A-1 > 2A-2 > 2A-3，第一个可用者胜出。</li>
+  <li><strong>族③</strong>：校内排名专用，与族①②互补。仅当族①②均不可用时作为主方法。</li>
+  <li><strong>方法④</strong>：独立运行，仅计算选科部分，不单独决定总分。可与任意族配合使用。</li>
+</ul>
+</div>
+
+<div class="card warn">
+<h4>v4 → v5 变更要点</h4>
+<ul>
+  <li><strong>跨次回退折扣</strong>：从指数衰减 <code>0.85^n</code> 改为<strong>固定 0.9</strong>。原方案跨1次=0.85、跨2次=0.72，衰减过快；固定0.9更合理（跨1次=0.9、跨2次=0.9，不因跳过次数而过度惩罚）。</li>
+  <li><strong>计算详情展示</strong>：detail 字段从"一句话摘要"改为<strong>分步骤展示</strong>，每步包含公式+数值+结果。</li>
+  <li><strong>技术回滚场景</strong>：场景一明确展示选科无校内划线时的跨次回退路径。</li>
+</ul>
+</div>
+
+<hr class="divider">
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<h2 id="scenario1">二、场景一：期末考试（完整校内划线）</h2>
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<div class="scenario-input">
+  <h5>输入数据</h5>
+  <table class="summary-table">
+    <tr><td>考试名称</td><td>期末考试</td></tr>
+    <tr><td>学生成绩</td><td>语文115 + 数学120 + 英语115 = 语数英350分；物理78分；化学82分；技术88分（原始分）</td></tr>
+    <tr><td>技术赋分</td><td>本次无赋分</td></tr>
+    <tr><td>上次月考记录</td><td>技术赋分85分（A级）— <strong>用于跨次回退</strong></td></tr>
+  </table>
+</div>
+
+<div class="scenario-input">
+  <h5>校内升级 Sheet（期末升级）— 特控线分段</h5>
+  <table>
+    <thead><tr><th>科目</th><th>2028划线</th><th>2028上线人数</th></tr></thead>
+    <tbody>
+      <tr><td>语数英综合</td><td>270</td><td>500</td></tr>
+      <tr><td>物理</td><td>72</td><td>300</td></tr>
+      <tr><td>化学</td><td>75</td><td>280</td></tr>
+      <tr><td style="color:#dc2626;">技术</td><td style="color:#dc2626;">— 无 —</td><td style="color:#dc2626;">— 无 —</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="scenario-input">
+  <h5>校内升级 Sheet（期末升级）— 浙大线分段</h5>
+  <table>
+    <thead><tr><th>科目</th><th>2028划线</th><th>2028上线人数</th></tr></thead>
+    <tbody>
+      <tr><td>语数英综合</td><td>300</td><td>150</td></tr>
+      <tr><td>物理</td><td>85</td><td>100</td></tr>
+      <tr><td>化学</td><td>88</td><td>90</td></tr>
+      <tr><td style="color:#dc2626;">技术</td><td style="color:#dc2626;">— 无 —</td><td style="color:#dc2626;">— 无 —</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="scenario-input">
+  <h5>高考参考目标（config.py 固定常量）</h5>
+  <table>
+    <thead><tr><th>项目</th><th>特控目标</th><th>浙大目标</th></tr></thead>
+    <tbody>
+      <tr><td>语数英（450分制）</td><td>341</td><td>382</td></tr>
+      <tr><td>选科（100分制）</td><td>90</td><td>96</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<h3>方法选择：族① 1A 模式</h3>
+<div class="info-box">
+检测到语数英综合有特控线(270) + 浙大线(300)，且有选科独立划线（物理、化学）<br>
+→ 进入 <strong>1A 双模块完整换算模式</strong>（A级）<br>
+→ 技术无独立划线 → Module 2 中走跨次回退路径
+</div>
+
+<h3>逐步计算</h3>
+
+<!-- ── Module 1: 语数英 ── -->
+<div class="card">
+<h4>Module 1：语数英（450分制 → 等效）</h4>
+
+<div class="calc-step">
+  <span class="label">步骤 1：计算学生语数英原始分总和</span>
+  <div class="formula">学生语数英 = 语文115 + 数学120 + 英语115 = <span class="answer">350 分</span></div>
+</div>
+
+<div class="calc-step">
+  <span class="label">步骤 2：读取校内划线</span>
+  <div class="formula">校特控线 = 270 分（上线500人）</div>
+  <div class="formula">校浙大线 = 300 分（上线150人）</div>
+</div>
+
+<div class="calc-step">
+  <span class="label">步骤 3：计算线上比例（特控线 → 浙大线 区间内的位置）</span>
+  <div class="formula">ratio = (学生分数 - 特控线) / (浙大线 - 特控线)</div>
+  <div class="formula">ratio = (350 - 270) / (300 - 270) = 80 / 30 = 2.667</div>
+  <div class="formula warn">→ 2.667 > 1.0，说明学生超过浙大线，封顶 ratio = 1.0</div>
+</div>
+
+<div class="calc-step">
+  <span class="label">步骤 4：基础等效分（线性插值 特控目标 ↔ 浙大目标）</span>
+  <div class="formula">基础等效 = 特控目标 + (浙大目标 - 特控目标) × ratio</div>
+  <div class="formula">基础等效 = 341 + (382 - 341) × 1.0 = 341 + 41 = <span class="answer">382.0 分</span></div>
+</div>
+
+<div class="calc-step">
+  <span class="label">步骤 5：超额衰减奖励（超过浙大线的部分，按衰减系数×0.3计算）</span>
+  <div class="formula">超额 = 学生分数 - 浙大线 = 350 - 300 = 50 分</div>
+  <div class="formula">每分价值 = (浙大目标 - 特控目标) / (浙大线 - 特控线) = 41 / 30 = 1.367 分/分</div>
+  <div class="formula">衰减奖励 = 超额 × 衰减系数(0.3) × 每分价值 = 50 × 0.3 × 1.367 = <span class="answer">20.5 分</span></div>
+</div>
+
+<div class="calc-step">
+  <span class="label">步骤 6：最终语数英等效分</span>
+  <div class="formula">等效 = min(基础等效 + 衰减奖励, 语数英上限430)</div>
+  <div class="formula">等效 = min(382.0 + 20.5, 430) = min(402.5, 430) = <span class="answer">402.5 分</span></div>
+  <div class="formula">置信度 = <span class="badge badge-a">A级</span>（特控线+浙大线双线齐全）</div>
+</div>
+</div>
+
+<!-- ── Module 2: 物理 ── -->
+<div class="card">
+<h4>Module 2-1：物理（78分，有特控线72 + 浙大线85）</h4>
+
+<div class="calc-step">
+  <span class="label">步骤 1：读取校内划线</span>
+  <div class="formula">校特控线 = 72 分，校浙大线 = 85 分</div>
+</div>
+
+<div class="calc-step">
+  <span class="label">步骤 2：计算线上比例</span>
+  <div class="formula">ratio = (78 - 72) / (85 - 72) = 6 / 13 = 0.4615</div>
+  <div class="formula">→ 0 < 0.4615 < 1.0，位于特控线与浙大线之间，正常插值</div>
+</div>
+
+<div class="calc-step">
+  <span class="label">步骤 3：等效分</span>
+  <div class="formula">等效 = 选科特控目标 + (选科浙大目标 - 选科特控目标) × ratio</div>
+  <div class="formula">等效 = 90 + (96 - 90) × 0.4615 = 90 + 2.77 = <span class="answer">92.8 分</span></div>
+  <div class="formula">置信度 = <span class="badge badge-a">A级</span>（双线齐全）</div>
+</div>
+</div>
+
+<!-- ── Module 2: 化学 ── -->
+<div class="card">
+<h4>Module 2-2：化学（82分，有特控线75 + 浙大线88）</h4>
+
+<div class="calc-step">
+  <span class="label">步骤 1：读取校内划线</span>
+  <div class="formula">校特控线 = 75 分，校浙大线 = 88 分</div>
+</div>
+
+<div class="calc-step">
+  <span class="label">步骤 2：计算线上比例</span>
+  <div class="formula">ratio = (82 - 75) / (88 - 75) = 7 / 13 = 0.5385</div>
+  <div class="formula">→ 0 < 0.5385 < 1.0，位于特控线与浙大线之间，正常插值</div>
+</div>
+
+<div class="calc-step">
+  <span class="label">步骤 3：等效分</span>
+  <div class="formula">等效 = 90 + (96 - 90) × 0.5385 = 90 + 3.23 = <span class="answer">93.2 分</span></div>
+  <div class="formula">置信度 = <span class="badge badge-a">A级</span>（双线齐全）</div>
+</div>
+</div>
+
+<!-- ── Module 2: 技术（回滚）── -->
+<div class="card warn">
+<h4>Module 2-3：技术（88分原始分，本次无校内划线）<span class="badge badge-c" style="margin-left:8px;">跨次回退</span></h4>
+
+<div class="calc-step">
+  <span class="label">步骤 1：检测校内划线</span>
+  <div class="formula warn">技术在升级 Sheet 中无特控线、无浙大线 → 无法直接换算</div>
+</div>
+
+<div class="calc-step">
+  <span class="label">步骤 2：检测赋分</span>
+  <div class="formula warn">本次考试技术无赋分 → 无法使用赋分直映</div>
+</div>
+
+<div class="calc-step">
+  <span class="label">步骤 3：跨次回退 — 查找上一次考试的技术数据</span>
+  <div class="formula">读取 成绩总表.xlsx，从最新一条往回搜索</div>
+  <div class="formula">跳过当前"期末考试"记录</div>
+  <div class="formula">找到上次"月考"记录：选科3名称=技术，选科3赋分=85（A级）</div>
+  <div class="formula">跳过考试次数 n = 1</div>
+</div>
+
+<div class="calc-step">
+  <span class="label">步骤 4：折扣计算（v5 修改：固定0.9，不再用 0.85^n 指数衰减）</span>
+  <div class="formula">折扣 = CROSS_EXAM_DISCOUNT = 0.9（固定值）</div>
+  <div class="formula note"># v4 旧逻辑：discount = 0.85^1 = 0.85（衰减过快）</div>
+  <div class="formula note"># v5 新逻辑：discount = 0.9（固定，不随跳过次数递减）</div>
+</div>
+
+<div class="calc-step">
+  <span class="label">步骤 5：技术等效分</span>
+  <div class="formula">技术等效 = 上次赋分 × 折扣 = 85 × 0.9 = <span class="answer">76.5 分</span></div>
+  <div class="formula">置信度 = <span class="badge badge-c">C级</span>（跨次回退，精度降低）</div>
+  <div class="formula note">提示：建议补录本次技术赋分后重新计算以获得更精确结果</div>
+</div>
+</div>
+
+<!-- ── 总分汇总 ── -->
+<div class="card success">
+<h3>总分汇总</h3>
+<table>
+  <thead>
+    <tr><th>模块</th><th>科目</th><th>等效分</th><th>置信度</th><th>计算方式</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Module 1</td><td>语数英</td><td><strong>402.5</strong></td><td><span class="badge badge-a">A</span></td><td>双线插值+超额衰减</td></tr>
+    <tr><td>Module 2-1</td><td>物理</td><td><strong>92.8</strong></td><td><span class="badge badge-a">A</span></td><td>双线插值</td></tr>
+    <tr><td>Module 2-2</td><td>化学</td><td><strong>93.2</strong></td><td><span class="badge badge-a">A</span></td><td>双线插值</td></tr>
+    <tr><td>Module 2-3</td><td>技术</td><td><strong>76.5</strong></td><td><span class="badge badge-c">C</span></td><td>跨次回退(月考85×0.9)</td></tr>
+    <tr style="border-top:2px solid #16a34a;"><td colspan="2"><strong>总等效分</strong></td><td><strong style="font-size:18px;color:#16a34a;">665.0</strong></td><td><span class="badge badge-a">A</span></td><td>A×3 + C×1 → 整体A级</td></tr>
+  </tbody>
+</table>
+
+<div class="info-box" style="margin-top:12px;">
+  <strong>整体置信度判定：</strong>A×3模块 + C×1模块 → A级占 ≥50% 且无D级 → <strong>整体A级</strong><br>
+  <strong>误差区间：</strong>665.0 ± 5分 = [660.0, 670.0]<br>
+  <strong>主方法：</strong>双模块换算法（族① 1A模式）
+</div>
+</div>
+
+<!-- ── 计算详情字段 ── -->
+<div class="card">
+<h4>calculation_detail 字段（v5 格式）</h4>
+<div class="code-block"><span class="step">[主方法]</span> 双模块换算法（族①-1A）
+
+<span class="step">[Module 1 语数英]</span>
+  学生语数英=115+120+115=350
+  校特控线=270, 校浙大线=300
+  ratio=(350-270)/(300-270)=80/30=2.667 → 封顶1.0
+  基础等效=341+(382-341)×1.0=382.0
+  超额=350-300=50, 衰减奖励=50×0.3×(41/30)=20.5
+  <span class="result">语数英等效=402.5 (A级)</span>
+
+<span class="step">[Module 2 物理]</span>
+  raw=78, 校特控=72, 校浙大=85
+  ratio=(78-72)/(85-72)=6/13=0.462
+  <span class="result">物理等效=90+(96-90)×0.462=92.8 (A级)</span>
+
+<span class="step">[Module 2 化学]</span>
+  raw=82, 校特控=75, 校浙大=88
+  ratio=(82-75)/(88-75)=7/13=0.538
+  <span class="result">化学等效=90+(96-90)×0.538=93.2 (A级)</span>
+
+<span class="step">[Module 2 技术]</span>
+  <span class="warn">本次无校内划线, 无赋分 → 跨次回退</span>
+  上次月考: 技术赋分=85 (A级), 跳过n=1
+  折扣=0.9 (固定, v5修改)
+  <span class="result">技术等效=85×0.9=76.5 (C级)</span>
+
+<span class="step">[汇总]</span>
+  总等效=402.5+92.8+93.2+76.5=<span class="result">665.0</span>
+  模块置信度: A×3, C×1 → 整体A级
+  误差区间: [660.0, 670.0]</div>
+</div>
+
+<hr class="divider">
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<h2 id="scenario2">三、场景二：月考（仅语数英划线）</h2>
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<div class="scenario-input">
+  <h5>输入数据</h5>
+  <table class="summary-table">
+    <tr><td>考试名称</td><td>10月月考</td></tr>
+    <tr><td>学生成绩</td><td>语数英320分；物理75分（赋分88）；化学70分（赋分85）；技术80分（赋分82）</td></tr>
+    <tr><td>校内划线</td><td>仅语数英综合：特控线260分（上线450人）。<strong>无选科独立划线</strong></td></tr>
+  </table>
+</div>
+
+<h3>方法选择：族① 1B 模式</h3>
+<div class="warn-box">
+检测到语数英综合有特控线(260)，但<strong>无选科独立划线</strong><br>
+→ 进入 <strong>1B 仅语数英划线模式</strong>（B级）<br>
+→ 选科使用赋分直映（有赋分则直接使用）
+</div>
+
+<h3>逐步计算</h3>
+
+<div class="card">
+<h4>Module 1：语数英（仅有特控线，单点放缩）</h4>
+
+<div class="calc-step">
+  <span class="label">步骤 1：计算学生语数英</span>
+  <div class="formula">学生语数英 = 320 分</div>
+</div>
+
+<div class="calc-step">
+  <span class="label">步骤 2：单点比例放缩（无浙大线，仅用特控线）</span>
+  <div class="formula">ratio = 学生分数 / 特控线 = 320 / 260 = 1.231</div>
+  <div class="formula warn">→ ratio > 1.0，封顶为 1.0</div>
+</div>
+
+<div class="calc-step">
+  <span class="label">步骤 3：基础等效</span>
+  <div class="formula">基础等效 = 特控目标 × ratio = 341 × 1.0 = 341.0 分</div>
+</div>
+
+<div class="calc-step">
+  <span class="label">步骤 4：超额衰减奖励</span>
+  <div class="formula">超额 = 320 - 260 = 60 分</div>
+  <div class="formula">每分价值 = 特控目标 / 特控线 = 341 / 260 = 1.312</div>
+  <div class="formula">衰减奖励 = 60 × 0.3 × 1.312 = 23.6 分</div>
+</div>
+
+<div class="calc-step">
+  <span class="label">步骤 5：最终等效</span>
+  <div class="formula">语数英等效 = min(341 + 23.6, 430) = <span class="answer">364.6 分</span></div>
+  <div class="formula">置信度 = <span class="badge badge-b">B级</span>（仅有特控线，无浙大线）</div>
+</div>
+</div>
+
+<div class="card">
+<h4>Module 2：选科（赋分直映）</h4>
+<div class="calc-step">
+  <span class="label">物理：赋分88 → 等效88.0 <span class="badge badge-a">A级</span></span>
+</div>
+<div class="calc-step">
+  <span class="label">化学：赋分85 → 等效85.0 <span class="badge badge-a">A级</span></span>
+</div>
+<div class="calc-step">
+  <span class="label">技术：赋分82 → 等效82.0 <span class="badge badge-a">A级</span></span>
+</div>
+<div class="info-box" style="margin-top:8px;">
+  选科有赋分时直接使用赋分作为等效分（赋分本身就是全省排名换算结果）。
+</div>
+</div>
+
+<div class="card success">
+<h3>总分汇总</h3>
+<table>
+  <thead><tr><th>模块</th><th>等效分</th><th>置信度</th></tr></thead>
+  <tbody>
+    <tr><td>语数英</td><td>364.6</td><td><span class="badge badge-b">B</span></td></tr>
+    <tr><td>物理</td><td>88.0</td><td><span class="badge badge-a">A</span></td></tr>
+    <tr><td>化学</td><td>85.0</td><td><span class="badge badge-a">A</span></td></tr>
+    <tr><td>技术</td><td>82.0</td><td><span class="badge badge-a">A</span></td></tr>
+    <tr style="border-top:2px solid #16a34a;"><td><strong>总计</strong></td><td><strong style="color:#16a34a;">619.6</strong></td><td><span class="badge badge-b">B</span></td></tr>
+  </tbody>
+</table>
+<div class="info-box" style="margin-top:8px;">
+  B×1 + A×3 → A级占 ≥50% 但主模块(语数英)为B → <strong>整体B级</strong><br>
+  误差区间：619.6 ± 10分 = [609.6, 629.6]
+</div>
+</div>
+
+<hr class="divider">
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<h2 id="scenario3">四、场景三：周测（仅校内排名）</h2>
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<div class="scenario-input">
+  <h5>输入数据</h5>
+  <table class="summary-table">
+    <tr><td>考试名称</td><td>第8周周测</td></tr>
+    <tr><td>学生成绩</td><td>总分540分（750分制）</td></tr>
+    <tr><td>校内排名</td><td>第85名 / 全校600人</td></tr>
+    <tr><td>学校类型</td><td>区重点</td></tr>
+    <tr><td>外部参考</td><td>无特控线、无全市排名、无升级Sheet</td></tr>
+    <tr><td>本校对照表</td><td>有（本校对照表_总分）</td></tr>
+  </table>
+</div>
+
+<h3>方法选择：族③ 3-1 校内排名对照法</h3>
+<div class="info-box">
+无校内划线（族①不可用）、无外部参考（族②不可用）<br>
+→ 进入 <strong>族③ 校内排名映射</strong><br>
+→ 有本校对照表 → 使用 <strong>3-1 校内排名对照法</strong>（A级）
+</div>
+
+<h3>逐步计算</h3>
+
+<div class="card">
+<h4>校内排名对照法</h4>
+
+<div class="calc-step">
+  <span class="label">步骤 1：读取校内排名</span>
+  <div class="formula">原始排名 = 85名</div>
+  <div class="formula">重点班未参考人数 = 0（无补算）</div>
+  <div class="formula">校准后排名 = 85 + 0 = 85名</div>
+</div>
+
+<div class="calc-step">
+  <span class="label">步骤 2：在本校对照表中查找</span>
+  <div class="formula">对照表数据（示例）：</div>
+  <div class="formula">  排名80 → 高考总分632</div>
+  <div class="formula">  排名90 → 高考总分618</div>
+  <div class="formula">85 位于 [80, 90] 之间 → 线性插值</div>
+</div>
+
+<div class="calc-step">
+  <span class="label">步骤 3：线性插值</span>
+  <div class="formula">ratio = (85 - 80) / (90 - 80) = 5 / 10 = 0.5</div>
+  <div class="formula">等效分 = 632 + (618 - 632) × 0.5 = 632 - 7 = <span class="answer">625.0 分</span></div>
+  <div class="formula">置信度 = <span class="badge badge-a">A级</span>（有本校对照表）</div>
+</div>
+</div>
+
+<div class="card success">
+<h3>结果</h3>
+<table>
+  <thead><tr><th>项目</th><th>值</th></tr></thead>
+  <tbody>
+    <tr><td>等效分</td><td><strong style="color:#16a34a;">625.0</strong></td></tr>
+    <tr><td>置信度</td><td><span class="badge badge-a">A级</span></td></tr>
+    <tr><td>误差区间</td><td>[620.0, 630.0]</td></tr>
+    <tr><td>主方法</td><td>校内排名对照法（族③ 3-1）</td></tr>
+    <tr><td>交叉验证</td><td>无（仅一个可用方法）</td></tr>
+  </tbody>
+</table>
+</div>
+
+<hr class="divider">
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<h2 id="checklist">五、减法清单（P0-P7）</h2>
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<table>
+  <thead>
+    <tr><th>优先级</th><th>项目</th><th>当前状态</th><th>目标状态</th><th>影响范围</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><span class="badge badge-p0">P0</span></td>
+      <td>跨次回退折扣改为固定0.9</td>
+      <td><code>0.85^n</code> 指数衰减</td>
+      <td><code>0.9</code> 固定值</td>
+      <td>calc_equivalent.py 第775行, 第1066行</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-p0">P0</span></td>
+      <td>计算详情分步展示</td>
+      <td>一句话摘要</td>
+      <td>分步骤展示公式+数值+结果</td>
+      <td>calc_equivalent.py detail字段, report_personal.html</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-p1">P1</span></td>
+      <td>方法架构重构为族结构</td>
+      <td>8个独立方法平铺</td>
+      <td>3族+1独立，明确二选一关系</td>
+      <td>calc_equivalent.py run()函数</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-p1">P1</span></td>
+      <td>报告文件精简（8→2）</td>
+      <td>8个独立HTML文件</td>
+      <td>2个文件：个人档案 + 单科追踪(Tab切换)</td>
+      <td>generate_reports.py, report_subject.html</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-p2">P2</span></td>
+      <td>配置集中化验证</td>
+      <td>config.py已建立</td>
+      <td>确认所有模块均从config导入</td>
+      <td>全项目扫描</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-p2">P2</span></td>
+      <td>文档与代码同步</td>
+      <td>文档描述8方法</td>
+      <td>更新为3族+1独立架构</td>
+      <td>calc_equivalent.py docstring, DISCLAIMER</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-p2">P2</span></td>
+      <td>技术回退路径明确化</td>
+      <td>隐含在Priority 3</td>
+      <td>detail中显式标注"跨次回退"路径</td>
+      <td>calc_equivalent.py method_two_module</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-p2">P2</span></td>
+      <td>单科追踪Tab化</td>
+      <td>6个独立HTML</td>
+      <td>1个HTML + 6个Tab面板</td>
+      <td>report_subject.html, generate_reports.py</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-p2">P2</span></td>
+      <td>废弃方法清理</td>
+      <td>method_school_estimate C级回退</td>
+      <td>保留但标注"仅交叉验证，不参与融合"</td>
+      <td>calc_equivalent.py</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-p2">P2</span></td>
+      <td>测试补全</td>
+      <td>116 passed, 4 skipped</td>
+      <td>新增族架构测试 + 回退折扣测试</td>
+      <td>tests/</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr class="divider">
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<h2 id="roadmap">六、实施路线图</h2>
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<table>
+  <thead>
+    <tr><th>阶段</th><th>任务</th><th>预计改动</th><th>验证方式</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>阶段1</strong><br>P0 修复</td>
+      <td>1. 跨次回退折扣 0.85^n → 0.9<br>2. detail字段分步展示格式</td>
+      <td>calc_equivalent.py (~20行)<br>report_personal.html (~10行)</td>
+      <td>pytest + 手动验证场景一</td>
+    </tr>
+    <tr>
+      <td><strong>阶段2</strong><br>P1 架构</td>
+      <td>1. run()重构为族选择逻辑<br>2. 报告8→2文件合并<br>3. 单科追踪Tab化</td>
+      <td>calc_equivalent.py (~50行)<br>generate_reports.py (~80行)<br>report_subject.html (~60行)</td>
+      <td>pytest 全量 + 生成报告验证</td>
+    </tr>
+    <tr>
+      <td><strong>阶段3</strong><br>P2 完善</td>
+      <td>1. 文档同步<br>2. 废弃方法标注<br>3. 新增测试用例</td>
+      <td>各文件 docstring<br>tests/ (~100行)</td>
+      <td>pytest + 代码审查</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="card success" style="margin-top:24px;">
+<h4>v5 方案核心改变</h4>
+<ul>
+  <li><strong>减法</strong>：8方法 → 3族+1独立；8报告 → 2报告</li>
+  <li><strong>透明度</strong>：detail从摘要 → 分步公式展示</li>
+  <li><strong>合理性</strong>：跨次回退从指数衰减 → 固定0.9</li>
+  <li><strong>架构清晰</strong>：族间并列/二选一关系明确，用户可理解方法选择逻辑</li>
+</ul>
+</div>
+
+<div style="text-align:center; margin-top:40px; color:#94a3b8; font-size:13px;">
+  study-tracker v5 减法方案 | 等待用户审查确认后进入实施阶段
+</div>
+
+</div>
+</body>
+</html>

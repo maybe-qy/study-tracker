@@ -18,7 +18,7 @@ MAIN_MAX = 430        # 语数英等效上限（~143/科）
 SUB_MAX = 100         # 选科等效上限
 DAMPING = 0.3         # 超过浙大线后的衰减系数
 SUBJECT_SUM_DECAY = 0.5    # 单科加总在融合中的衰减因子
-CROSS_EXAM_DISCOUNT = 0.85 # 跨次回退折扣系数
+CROSS_EXAM_DISCOUNT = 0.9  # 跨次回退固定折扣系数（原 0.85^n 指数衰减）
 
 # ── 置信度体系 ──
 CONFIDENCE_WEIGHTS = {"A": 1.0, "B": 0.8, "C": 0.5, "D": 0.0}

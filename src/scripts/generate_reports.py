@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Generate 8 HTML reports from Excel data.
+"""Generate 2 Tab-based HTML reports from Excel data.
 
 Reports:
-  1. 个人档案.html — latest equivalent score, status, target gap
-  2. 高考总分趋势.html — equivalent score time series + analysis
-  3-8. [语文/数学/英语/选1/选2/选3]追踪.html — single subject tracking
+  1. 个人总览.html — Tab-based: 个人档案 + 高考总分趋势
+  2. 单科追踪.html — Tab-based: 语文/数学/英语/选科1/选科2/选科3
 
 Usage:
   python generate_reports.py --workspace <path>
@@ -764,6 +763,279 @@ def render_subject(data, env, subject_name, sheet_name):
     )
 
 
+def render_overview(data, env):
+    """Render 个人总览.html (Tab-based: 个人档案 + 高考总分趋势)."""
+    eq_records = data["equivalent"]
+    macro = data.get("macro", {})
+    exam_records = data.get("exams", [])
+
+    if not eq_records:
+        has_exams = len(exam_records) >= 1
+        template = env.get_template("report_overview.html")
+        return template.render(
+            generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
+            equivalent_score="暂无数据" if not has_exams else "等待计算",
+            latest_equiv=0,
+            confidence="-",
+            method="-",
+            calc_detail="",
+            error_lower="-",
+            error_upper="-",
+            has_analysis=False,
+            is_first_record=False,
+            exam_count=len(exam_records),
+            trend_class="flat",
+            trend_arrow="→",
+            trend_text="等待数据",
+            prediction_state="-",
+            volatility_lower="-",
+            volatility_upper="-",
+            sigma="-",
+            subject_scores=[],
+            tier_info=None,
+            volatility_style="-",
+            exams=[],
+            labels={"positive": "-", "normal": "-", "negative": "-"},
+            cross_validations=[],
+            disclaimer=DISCLAIMER,
+        )
+
+    latest = eq_records[-1]
+    latest_equiv = safe_float(latest.get("等效分（融合结果）"))
+    eq_scores = extract_eq_scores(eq_records)
+    weighted = filter_weighted(eq_records)
+
+    trend_class, trend_arrow, trend_text = compute_trend(eq_scores)
+    sigma, vol_low, vol_high = compute_volatility_weighted(weighted)
+    pred = prediction_state(eq_scores)
+    has_analysis = len(eq_scores) >= MIN_DATA_FOR_ANALYSIS
+    is_first_record = len(eq_scores) == 1
+    labels, label_sequence = eval_labels(eq_scores) if len(eq_scores) >= MIN_DATA_FOR_ANALYSIS else (None, None)
+    volatility_style = classify_volatility_style(labels, sigma, label_sequence) if has_analysis else None
+
+    # ── 院校定位 ──
+    target_university = latest.get("目标院校")
+    target_line = safe_float(latest.get("目标院校录取线"))
+    target_gap = safe_float(latest.get("差距分数"))
+    score = latest_equiv if latest_equiv is not None else (eq_scores[-1] if eq_scores else 0)
+    if target_gap is None and target_line is not None and score > 0:
+        target_gap = round(score - target_line, 1)
+    tier_info = _compute_tier_info(macro, score, target_university, target_line, target_gap)
+
+    # 从最新记录提取计算详情
+    latest_calc_detail = ""
+    latest_subject_scores = []
+    detail_obj = parse_eq_detail(latest.get("详细信息", ""))
+    if detail_obj:
+        latest_calc_detail = detail_obj.get("calculation_detail", "")
+        latest_subject_scores = detail_obj.get("subject_scores", [])
+
+    # ── 趋势表格数据 ──
+    exams = []
+    for r in eq_records:
+        d_obj = parse_eq_detail(r.get("详细信息", ""))
+        cd = d_obj.get("calculation_detail", "") if d_obj else ""
+        exams.append({
+            "date": r.get("日期", "-"),
+            "name": r.get("考试名", "-"),
+            "score": r.get("等效分（融合结果）", "-"),
+            "confidence": str(r.get("置信度", "-")).replace("级", "").strip() or "-",
+            "method": r.get("主计算方法", "-"),
+            "calc_detail": cd,
+            "method_switch": False,
+            "prev_method": "",
+        })
+
+    for i in range(1, len(exams)):
+        if exams[i].get("method") != exams[i - 1].get("method"):
+            exams[i]["method_switch"] = True
+            exams[i]["prev_method"] = exams[i - 1].get("method", "")
+    exams = list(reversed(exams))
+
+    # 交叉验证
+    cross_validations = []
+    for r in eq_records:
+        for cv_num in ("1", "2"):
+            cv_method = r.get(f"交叉验证方法{cv_num}")
+            cv_score = r.get(f"交叉验证分{cv_num}")
+            if cv_method and cv_score:
+                diff = None
+                primary = safe_float(r.get("等效分（融合结果）"))
+                cv_score_f = safe_float(cv_score)
+                if cv_score_f is None:
+                    continue
+                if primary is not None:
+                    diff = f"{cv_score_f - primary:+.1f}"
+                cross_validations.append({
+                    "exam": r.get("考试名", "-"),
+                    "method": cv_method,
+                    "score": cv_score,
+                    "diff": diff or "-",
+                })
+
+    template = env.get_template("report_overview.html")
+    return template.render(
+        generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
+        equivalent_score=f"{latest_equiv:.0f} 分" if latest_equiv is not None else "暂无",
+        latest_equiv=latest_equiv if latest_equiv is not None else 0,
+        confidence=str(latest.get("置信度", "-")).replace("级", "").strip() or "-",
+        method=latest.get("主计算方法", "-"),
+        calc_detail=latest_calc_detail,
+        error_lower=latest.get("误差区间下限", "-"),
+        error_upper=latest.get("误差区间上限", "-"),
+        has_analysis=has_analysis,
+        trend_class=trend_class,
+        trend_arrow=trend_arrow,
+        trend_text=trend_text,
+        prediction_state=pred or "-",
+        volatility_lower=vol_low if vol_low is not None else "-",
+        volatility_upper=vol_high if vol_high is not None else "-",
+        sigma=f"{sigma}分" if sigma is not None else "-",
+        volatility_style=volatility_style or "-",
+        is_first_record=is_first_record,
+        exam_count=len(eq_scores),
+        subject_scores=latest_subject_scores,
+        tier_info=tier_info,
+        # 趋势 Tab 数据
+        exams=exams,
+        labels={"positive": labels["积极"] if labels else "-", "normal": labels["正常"] if labels else "-", "negative": labels["消极"] if labels else "-"},
+        cross_validations=cross_validations,
+        disclaimer=DISCLAIMER,
+    )
+
+
+def render_all_subjects(data, env):
+    """Render 单科追踪.html (Tab-based: 语文/数学/英语/选科1/选科2/选科3)."""
+    subject_sheet_map = {
+        "语文追踪": "语文",
+        "数学追踪": "数学",
+        "英语追踪": "英语",
+        "选科1追踪": "选科1",
+        "选科2追踪": "选科2",
+        "选科3追踪": "选科3",
+    }
+
+    exams = data["exams"]
+    latest_exam = exams[-1] if exams else None
+    if latest_exam:
+        sub1_name = latest_exam.get("选科1名称")
+        sub2_name = latest_exam.get("选科2名称")
+        sub3_name = latest_exam.get("选科3名称")
+        if sub1_name:
+            subject_sheet_map["选科1追踪"] = str(sub1_name)
+        if sub2_name:
+            subject_sheet_map["选科2追踪"] = str(sub2_name)
+        if sub3_name:
+            subject_sheet_map["选科3追踪"] = str(sub3_name)
+
+    subjects = []
+    for sheet_name, subject_name in subject_sheet_map.items():
+        # 提取单科数据（同 render_subject 逻辑）
+        eq_records = data.get("equivalent", [])
+        records = []
+        scores = []
+
+        if eq_records:
+            for eq in eq_records:
+                detail_obj = parse_eq_detail(eq.get("详细信息", ""))
+                if not detail_obj:
+                    continue
+                for s in detail_obj.get("subject_scores", []):
+                    if s.get("subject") != subject_name:
+                        continue
+                    score = s.get("score")
+                    if score is not None:
+                        score_f = safe_float(score)
+                        if score_f is None:
+                            continue
+                        scores.append(score_f)
+                        records.append({
+                            "date": eq.get("日期", "-"),
+                            "exam": eq.get("考试名", "-"),
+                            "score": f"{score_f:.1f}",
+                            "confidence": s.get("confidence", "-"),
+                            "method": s.get("method", "-"),
+                        })
+
+        if not records:
+            subject_data = data["subjects"].get(sheet_name, [])
+            if subject_data:
+                for r in subject_data:
+                    raw = r.get("原始分")
+                    assigned = r.get("赋分")
+                    rec, score_float = _build_subject_record(
+                        r.get("日期"), r.get("考试名"), raw, assigned,
+                        r.get("赋分置信度"), subject_name,
+                    )
+                    records.append(rec)
+                    if score_float is not None:
+                        scores.append(score_float)
+            else:
+                for exam in data.get("exams", []):
+                    raw = None
+                    assigned = None
+                    conf = None
+                    if subject_name in ("语文", "数学", "英语"):
+                        raw = exam.get(subject_name)
+                        conf = "B"
+                    else:
+                        for i in range(1, 4):
+                            if str(exam.get(f"选科{i}名称", "")) == subject_name:
+                                raw = exam.get(f"选科{i}原始分")
+                                assigned = exam.get(f"选科{i}赋分")
+                                conf = exam.get(f"选科{i}赋分置信度") or "A"
+                                break
+                    if raw is None or raw == "":
+                        continue
+                    rec, score_float = _build_subject_record(
+                        exam.get("日期"), exam.get("考试名"), raw, assigned,
+                        conf, subject_name,
+                    )
+                    records.append(rec)
+                    if score_float is not None:
+                        scores.append(score_float)
+
+        valid_scores = [s for s in scores if s is not None]
+        if not valid_scores:
+            subjects.append({
+                "name": subject_name,
+                "has_data": False,
+                "dynamic_score": "-",
+                "latest": "-",
+                "highest": "-",
+                "trend_class": "flat",
+                "trend_arrow": "→",
+                "trend_text": "无数据",
+                "is_first_record": False,
+                "records": [],
+            })
+        else:
+            dynamic = round(ewma(valid_scores, alpha=EWMA_ALPHA), 1)
+            latest = valid_scores[-1]
+            highest = max(valid_scores)
+            t_class, t_arrow, t_text = compute_trend(valid_scores)
+            is_first = len(valid_scores) == 1
+            subjects.append({
+                "name": subject_name,
+                "has_data": True,
+                "dynamic_score": dynamic,
+                "latest": latest,
+                "highest": highest,
+                "trend_class": t_class,
+                "trend_arrow": t_arrow,
+                "trend_text": t_text,
+                "is_first_record": is_first,
+                "records": list(reversed(records)),
+            })
+
+    template = env.get_template("report_subjects.html")
+    return template.render(
+        generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
+        subjects=subjects,
+        disclaimer=DISCLAIMER,
+    )
+
+
 def run(workspace):
     data = load_data(workspace)
     data["_workspace"] = workspace
@@ -791,54 +1063,21 @@ def run(workspace):
             errors.append(f"{render_fn.__name__}: {e}")
             return None
 
-    # 1. 个人档案
-    html = _safe_render(render_personal, data, env)
+    # 报告 1: 个人总览.html（Tab 整合 个人档案 + 高考总分趋势）
+    html = _safe_render(render_overview, data, env)
     if html:
-        p = os.path.join(workspace, "output", "个人档案.html")
+        p = os.path.join(workspace, "output", "个人总览.html")
         with open(p, "w", encoding="utf-8") as f:
             f.write(html)
         generated.append(p)
 
-    # 2. 高考总分趋势
-    html = _safe_render(render_trend, data, env)
+    # 报告 2: 单科追踪.html（Tab 整合 6 科）
+    html = _safe_render(render_all_subjects, data, env)
     if html:
-        p = os.path.join(workspace, "output", "高考总分趋势.html")
+        p = os.path.join(workspace, "output", "单科追踪.html")
         with open(p, "w", encoding="utf-8") as f:
             f.write(html)
         generated.append(p)
-
-    # 3-8. 单科追踪 x6
-    # Determine subject names from exam data
-    subject_sheet_map = {
-        "语文追踪": "语文",
-        "数学追踪": "数学",
-        "英语追踪": "英语",
-        "选科1追踪": "选科1",
-        "选科2追踪": "选科2",
-        "选科3追踪": "选科3",
-    }
-
-    # Try to get actual subject names from exam data
-    exams = data["exams"]
-    latest_exam = exams[-1] if exams else None
-    if latest_exam:
-        sub1_name = latest_exam.get("选科1名称")
-        sub2_name = latest_exam.get("选科2名称")
-        sub3_name = latest_exam.get("选科3名称")
-        if sub1_name:
-            subject_sheet_map["选科1追踪"] = str(sub1_name)
-        if sub2_name:
-            subject_sheet_map["选科2追踪"] = str(sub2_name)
-        if sub3_name:
-            subject_sheet_map["选科3追踪"] = str(sub3_name)
-
-    for sheet_name, subject_name in subject_sheet_map.items():
-        html = _safe_render(render_subject, data, env, subject_name, sheet_name)
-        if html:
-            p = os.path.join(workspace, "output", f"{subject_name}追踪.html")
-            with open(p, "w", encoding="utf-8") as f:
-                f.write(html)
-            generated.append(p)
 
     result = {"status": "ok", "files": generated}
     if errors:
