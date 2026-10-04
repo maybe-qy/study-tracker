@@ -20,6 +20,28 @@ class MonthOutput {
     this.rawText = '',
   });
 
+  Map<String, dynamic> toJson() => {
+        'narrative': narrative,
+        'snapshot': snapshot.toJson(),
+        'archiveLine': archiveLine,
+        'nextPlan': nextPlan.toJson(),
+        'choices': choices.map((e) => e.toJson()).toList(),
+        'rawText': rawText,
+      };
+
+  factory MonthOutput.fromJson(Map<String, dynamic> json) => MonthOutput(
+        narrative: json['narrative'] as String? ?? '',
+        snapshot: MonthlyState.fromJson(
+            Map<String, dynamic>.from(json['snapshot'] as Map? ?? {})),
+        archiveLine: json['archiveLine'] as String? ?? '',
+        nextPlan: MonthlyPlan.fromJson(
+            Map<String, dynamic>.from(json['nextPlan'] as Map? ?? {})),
+        choices: (json['choices'] as List<dynamic>? ?? [])
+            .map((e) => Choice.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList(),
+        rawText: json['rawText'] as String? ?? '',
+      );
+
   MonthOutput copyWith({
     String? narrative,
     MonthlyState? snapshot,

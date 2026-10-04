@@ -35,7 +35,7 @@ class _InitScreenState extends ConsumerState<InitScreen> {
   late final TextEditingController _permanent;
   late final TextEditingController _risk;
 
-  DateTime _birthDate = DateTime(2009, 9, 28);
+  DateTime _birthDate = DateTime(2009, 3, 15);
   DateTime _enrollDate = DateTime(2028, 9, 1);
   DateTime _gradDate = DateTime(2032, 6, 30);
 
@@ -316,19 +316,19 @@ class _InitScreenState extends ConsumerState<InitScreen> {
 
   Widget _stepBasic() => _scroll([
         _label('姓名'),
-        _text(_name, hint: '王哲栋'),
+        _text(_name, hint: '林知远'),
         _label('性别'),
         _text(_gender, hint: '男 / 女'),
         _label('出生日期'),
         _dateTile(_birthDate, (d) => setState(() => _birthDate = d),
             first: DateTime(1990), last: DateTime(2020)),
         _label('家庭所在地'),
-        _text(_hometown, hint: '杭州'),
+        _text(_hometown, hint: '成都'),
       ]);
 
   Widget _stepStudy() => _scroll([
         _label('大学 / 学校（含所在地）'),
-        _text(_university, hint: '湖南大学（985）· 长沙'),
+        _text(_university, hint: '江城大学 · 江城'),
         _label('专业'),
         _text(_major, hint: '软件工程'),
         _label('入学时间'),
@@ -342,15 +342,15 @@ class _InitScreenState extends ConsumerState<InitScreen> {
 
   Widget _stepPersona() => _scroll([
         _label('核心性格（≤5 个词，用「、」分隔）'),
-        _text(_personality, hint: '嘴硬心软、直接、洒脱、踏实能扛事'),
+        _text(_personality, hint: '外冷内热、直接、爱较真、抗压强'),
         _label('长期愿景'),
-        _text(_vision, hint: 'AI教育产品经理 → AI教育产品架构师', maxLines: 3),
+        _text(_vision, hint: 'AI 产品方向 → 技术型产品负责人', maxLines: 3),
         _label('当前优势（用「、」分隔）'),
-        _text(_strengths, hint: '系统思维、构建冲动、主动连接', maxLines: 3),
+        _text(_strengths, hint: '逻辑缜密、动手能力强、善于复盘', maxLines: 3),
         _label('当前困境（用「、」分隔）'),
-        _text(_weaknesses, hint: '环境全新，节奏未建立', maxLines: 3),
+        _text(_weaknesses, hint: '新环境适应偏慢、表达偏克制', maxLines: 3),
         _label('底线 / 禁区'),
-        _text(_forbidden, hint: '不碰违法、自残、伤害他人之事', maxLines: 2),
+        _text(_forbidden, hint: '不碰违法、伤害他人之事', maxLines: 2),
         _label('永久项（贯穿全程，默认 运动锚点 + 英语线）'),
         _text(_permanent, hint: '运动锚点、英语线'),
         _label('风险偏好'),

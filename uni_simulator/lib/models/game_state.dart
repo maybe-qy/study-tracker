@@ -73,6 +73,7 @@ class GameState {
         'nextPlanDraft': nextPlanDraft?.toJson(),
         'pendingChoices': pendingChoices.map((e) => e.toJson()).toList(),
         'pendingEvent': pendingEvent?.toJson(),
+        'lastOutput': lastOutput?.toJson(),
         'monthsSinceLastEvent': monthsSinceLastEvent,
         'recentVisionScores': recentVisionScores,
         'lastChoiceText': lastChoiceText,
@@ -101,6 +102,10 @@ class GameState {
             ? null
             : RandomEvent.fromJson(
                 Map<String, dynamic>.from(json['pendingEvent'] as Map)),
+        lastOutput: json['lastOutput'] == null
+            ? null
+            : MonthOutput.fromJson(
+                Map<String, dynamic>.from(json['lastOutput'] as Map)),
         monthsSinceLastEvent:
             (json['monthsSinceLastEvent'] as num?)?.toInt() ?? 0,
         recentVisionScores: (json['recentVisionScores'] as List<dynamic>? ?? [])

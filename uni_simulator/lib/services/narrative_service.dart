@@ -22,7 +22,7 @@ class NarrativeService {
     required List<ArchiveLine> recentArchives,
     RandomEvent? event,
     String? userChoice,
-    int targetLength = 2500,
+    int targetLength = 1500,
   }) async {
     final prompt = PromptBuilder.buildMonthPrompt(
       state: state,

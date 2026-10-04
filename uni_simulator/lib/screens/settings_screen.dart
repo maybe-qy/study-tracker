@@ -20,6 +20,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   late double _temperature;
   late int _maxTokens;
   late String _provider;
+  late bool _thinking;
   bool _obscure = true;
   bool _testing = false;
   String? _testResult;
@@ -35,6 +36,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _temperature = s.temperature;
     _maxTokens = s.maxTokens;
     _provider = s.provider;
+    _thinking = s.thinking;
   }
 
   @override
@@ -52,6 +54,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         model: _model.text.trim(),
         temperature: _temperature,
         maxTokens: _maxTokens,
+        thinking: _thinking,
       );
 
   Future<void> _save() async {
@@ -147,7 +150,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             controller: _baseUrl,
             keyboardType: TextInputType.url,
             decoration: const InputDecoration(
-              hintText: 'https://api.deepseek.com/v1',
+              hintText: 'https://api.deepseek.com',
             ),
           ),
           const SizedBox(height: 18),
@@ -171,7 +174,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _label('模型名'),
           TextField(
             controller: _model,
-            decoration: const InputDecoration(hintText: 'deepseek-chat'),
+            decoration: const InputDecoration(hintText: 'deepseek-flash'),
           ),
           const SizedBox(height: 18),
           _label('Temperature（叙事随机性）'),
@@ -231,6 +234,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ],
           ),
           const SizedBox(height: 20),
+          if (_provider == 'deepseek') ...[
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _thinking,
+              onChanged: (v) => setState(() => _thinking = v),
+              title: const Text(
+                '思考模式',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+              subtitle: const Text(
+                '关闭后生成更快、正文更不易被截断（推荐关闭）',
+                style: TextStyle(fontSize: 12, color: AppColors.inkSoft),
+              ),
+            ),
+            const SizedBox(height: 4),
+          ],
           Row(
             children: [
               Expanded(
@@ -279,7 +298,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const Text(
             '说明\n'
             '· 支持 OpenAI 兼容接口（DeepSeek / OpenAI / 自建）与 Anthropic Claude。\n'
-            '· 长文叙事建议 max tokens ≥ 4096，温度 0.8–1.1。\n'
+            '· DeepSeek 默认地址 https://api.deepseek.com，模型 deepseek-flash。\n'
+            '· 长文叙事建议 max tokens ≥ 8192，温度 0.8–1.1；关闭「思考模式」可减少正文截断。\n'
             '· 密钥仅保存在本机 Hive 数据库中。',
             style: TextStyle(
                 fontSize: 12, color: AppColors.inkSoft, height: 1.9),

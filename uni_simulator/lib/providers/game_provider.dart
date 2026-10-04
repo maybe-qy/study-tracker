@@ -241,6 +241,11 @@ class GameNotifier extends Notifier<GameUiState> {
     game.year = year;
     game.month = month;
 
+    // 进入新月份：清空上月的推演产出，避免重启后旧正文挂在新月份下。
+    // 上月正文已存入 SQLite，可在「存档」中回看。
+    game.lastOutput = null;
+    game.pendingChoices = <Choice>[];
+
     final prev = game.currentState;
     game.currentState = MonthlyState(
       year: year,

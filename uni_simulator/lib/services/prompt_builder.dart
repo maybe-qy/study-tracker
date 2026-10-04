@@ -36,7 +36,7 @@ class PromptBuilder {
     required List<ArchiveLine> recentArchives,
     RandomEvent? event,
     String? userChoice,
-    int targetLength = 2500,
+    int targetLength = 1500,
   }) {
     final profile = state.profile;
     final year = state.year;
@@ -46,7 +46,7 @@ class PromptBuilder {
     final snapshot = state.currentState;
 
     final buffer = StringBuffer();
-    buffer.writeln('基于以下状态，生成一段 $targetLength 字左右的叙事（不少于 ${(targetLength * 0.6).round()} 字）。');
+    buffer.writeln('基于以下状态，生成一段约 $targetLength 字的叙事（${(targetLength * 0.6).round()}–${(targetLength * 1.2).round()} 字，务必不要超长，超出部分会被截断）。');
     buffer.writeln();
     buffer.writeln('【当前状态】');
     buffer.writeln('- 时间：$year年$month月');
@@ -102,6 +102,7 @@ class PromptBuilder {
     buffer.writeln('5. 每段经历要有可追溯的结果。');
     buffer.writeln('6. 永久项「运动」与「英语」必须出现，不可省略。');
     buffer.writeln('7. 必须遵循下方的输出格式，四个二级标题缺一不可。');
+    buffer.writeln('8. 篇幅要克制：叙事控制在 ${(targetLength * 1.2).round()} 字以内，保证「状态快照 / 下月计划草案 / 选择题」三个部分能完整输出，绝不能因为写太长而被截断。');
     buffer.writeln();
     buffer.write(_outputFormat(year, month, age, profile));
     return buffer.toString();

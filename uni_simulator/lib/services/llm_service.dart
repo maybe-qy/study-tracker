@@ -64,6 +64,10 @@ class LlmService {
           'temperature': settings.temperature,
           'max_tokens': settings.maxTokens,
           'stream': false,
+          // DeepSeek 默认开启思考模式，思考 token 会挤占正文额度。
+          // 非思考模式更稳、更快，长正文不易被截断。
+          if (settings.provider == 'deepseek')
+            'thinking': {'type': settings.thinking ? 'enabled' : 'disabled'},
         },
       );
       final data = _asMap(response.data);

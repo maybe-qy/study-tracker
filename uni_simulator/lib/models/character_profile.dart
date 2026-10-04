@@ -49,29 +49,29 @@ class CharacterProfile {
         keyNodes = keyNodes ?? <Milestone>[],
         permanentItems = permanentItems ?? <String>['运动锚点', '英语线'];
 
-  /// 示例：王哲栋的默认档案（可在初始化页覆盖）。
+  /// 示例用的虚拟档案（非真实人物），可在初始化页覆盖。
   factory CharacterProfile.demo() => CharacterProfile(
-        name: '王哲栋',
+        name: '林知远',
         gender: '男',
-        birthDate: DateTime(2009, 9, 28),
-        hometown: '杭州',
-        university: '湖南大学（985）· 长沙',
+        birthDate: DateTime(2009, 3, 15),
+        hometown: '成都',
+        university: '江城大学 · 江城',
         education: '本科',
         careerStatus: '大一新生',
         major: '软件工程',
         enrollmentDate: DateTime(2028, 9, 1),
         graduationDate: DateTime(2032, 6, 30),
-        personality: ['嘴硬心软', '直接', '洒脱', '踏实能扛事'],
-        longTermVision: 'AI教育产品经理 → AI教育产品架构师',
-        strengths: ['系统思维', '构建冲动', '主动连接', '坦诚迭代', '信竞底子'],
-        weaknesses: ['环境全新，节奏未建立', '高中项目经验需转化为大学行动'],
-        forbiddenZone: '不碰违法、自残、伤害他人之事',
+        personality: ['外冷内热', '直接', '爱较真', '抗压强'],
+        longTermVision: 'AI 产品方向 → 技术型产品负责人',
+        strengths: ['逻辑缜密', '动手能力强', '善于复盘'],
+        weaknesses: ['新环境适应偏慢', '表达偏克制'],
+        forbiddenZone: '不碰违法、伤害他人之事',
         preferences: ['写代码', '跑步', '产品复盘'],
         riskTolerance: '中高',
         keyNodes: [
-          const Milestone(label: '入学', date: '2028-09', description: '湖南大学软件工程'),
+          const Milestone(label: '入学', date: '2028-09', description: '江城大学软件工程'),
           const Milestone(label: '毕业', date: '2032-06', description: '本科毕业'),
-          const Milestone(label: '目标', date: '2032-07', description: '进入大厂（如腾讯产品岗）'),
+          const Milestone(label: '目标', date: '2032-07', description: '进入互联网公司产品岗'),
         ],
         permanentItems: ['运动锚点', '英语线'],
       );
@@ -110,7 +110,7 @@ class CharacterProfile {
         name: json['name'] as String? ?? '未命名',
         gender: json['gender'] as String? ?? '',
         birthDate: DateTime.tryParse(json['birthDate'] as String? ?? '') ??
-            DateTime(2009, 9, 28),
+            DateTime(2009, 3, 15),
         hometown: json['hometown'] as String? ?? '',
         university: json['university'] as String? ?? '',
         education: json['education'] as String? ?? '',
