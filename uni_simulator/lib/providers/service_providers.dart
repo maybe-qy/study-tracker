@@ -51,13 +51,14 @@ class LlmSettingsNotifier extends Notifier<LlmSettings> {
     await ref.read(settingsServiceProvider).saveLlm(settings);
   }
 
-  Future<void> applyPreset(String provider) async {
+  /// 纯内存切换服务商预设，不立即持久化，等用户点"保存"再落盘。
+  void applyPreset(String provider) {
     final preset = LlmSettings.presets[provider];
     if (preset == null) return;
-    await update(state.copyWith(
+    state = state.copyWith(
       provider: provider,
       baseUrl: preset['baseUrl'] ?? state.baseUrl,
       model: preset['model'] ?? state.model,
-    ));
+    );
   }
 }

@@ -70,7 +70,7 @@ class PromptBuilder {
     for (final item in plan.items) {
       buffer.writeln('- ${item.label}. ${item.name}（权重 ${item.weight}%）${item.dimension.isNotEmpty ? '〔${item.dimension}〕' : ''}');
     }
-    buffer.writeln('（合计 ${plan.totalWeight}%，其中永久项「运动锚点」占 20%，已绑定，不必单独列出，但叙事中必须出现）');
+    buffer.writeln('（永久项：${profile.permanentItems.join(' + ')}。运动锚点固定占 20%，英语线贯穿全程——这两项是额外的底线要求，不占用上方 4 项的 100% 权重分配；叙事中必须真实出现其执行细节，不可省略）');
     buffer.writeln();
     if (userChoice != null && userChoice.isNotEmpty) {
       buffer.writeln('【上月做出的选择】');

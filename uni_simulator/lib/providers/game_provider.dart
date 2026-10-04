@@ -332,10 +332,8 @@ class GameNotifier extends Notifier<GameUiState> {
   Future<void> applyRecalibration(String newVision, String note) async {
     final game = state.game;
     if (game == null) return;
-    game.profile.longTermVision = newVision;
-    if (note.isNotEmpty) {
-      game.profile.strengths = [...game.profile.strengths, note];
-    }
+    game.profile.longTermVision = newVision.trim();
+    // 说明（note）是引擎内部解释，不追加到画像字段，避免污染 strengths。
     // 重校准后重置近期分数，避免立即再次触发。
     game.recentVisionScores = <int>[];
     _set(state.copyWith(game: game, recalibrationPrompt: null));
