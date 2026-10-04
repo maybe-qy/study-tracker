@@ -73,8 +73,17 @@ class LlmService {
       final data = _asMap(response.data);
       final choices = data['choices'];
       if (choices is List && choices.isNotEmpty) {
-        final message = _asMap(choices.first)['message'];
-        return _asMap(message)['content']?.toString() ?? '';
+        final first = _asMap(choices.first);
+        // finish_reason = length 表示模型输出被 token 上限截断：
+        // 此时正文与后三个部分多半不完整，必须显式报错让用户重试/调参，
+        // 而不是让解析层静默降级成默认选择题。
+        if (first['finish_reason'] == 'length') {
+          throw LlmException(
+              '输出被截断（已达 max_tokens 上限），正文可能不完整。'
+              '请在「设置」调大「单次最大 Token」（建议 ≥8192）、关闭「思考模式」，或减少本月计划事项后重试。');
+        }
+        final message = _asMap(first['message']);
+        return message['content']?.toString() ?? '';
       }
       throw LlmException('返回格式异常：未找到 choices');
     } on DioException catch (e) {
@@ -109,6 +118,11 @@ class LlmService {
       final data = _asMap(response.data);
       final content = data['content'];
       if (content is List && content.isNotEmpty) {
+        if (data['stop_reason'] == 'max_tokens') {
+          throw LlmException(
+              '输出被截断（已达 max_tokens 上限），正文可能不完整。'
+              '请在「设置」调大「单次最大 Token」后重试。');
+        }
         return content
             .map((e) => _asMap(e)['text']?.toString() ?? '')
             .join();

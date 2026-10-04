@@ -253,11 +253,11 @@ class NarrativeParser {
     );
   }
 
-  static List<String> _splitPipe(String line) => line
-      .split(RegExp(r'[|｜]'))
-      .map((e) => e.trim())
-      .where((e) => e.isNotEmpty)
-      .toList();
+  /// 按竖线切分并去掉首尾空白。
+  /// 注意：必须保留空段。若把空串过滤掉，「所在地为空」会让后面的身份/健康/技能
+  /// 整体左移一位，导致身份文本被写进所在地、技能被写进健康。
+  static List<String> _splitPipe(String line) =>
+      line.split(RegExp(r'[|｜]')).map((e) => e.trim()).toList();
 
   static MonthlyPlan parsePlan(String text) {
     final items = <PlanItem>[];

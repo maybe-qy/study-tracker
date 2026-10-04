@@ -122,17 +122,26 @@ class CharacterProfile {
         graduationDate:
             DateTime.tryParse(json['graduationDate'] as String? ?? '') ??
                 DateTime(2032, 6, 30),
-        personality: _strList(json['personality']),
+        // 列表字段缺失时传 null，让构造函数里的默认值生效
+        // （永久项缺失会让「运动 + 英语」这条铁律静默失效）。
+        personality: json['personality'] == null
+            ? null
+            : _strList(json['personality']),
         longTermVision: json['longTermVision'] as String? ?? '',
-        strengths: _strList(json['strengths']),
-        weaknesses: _strList(json['weaknesses']),
+        strengths:
+            json['strengths'] == null ? null : _strList(json['strengths']),
+        weaknesses:
+            json['weaknesses'] == null ? null : _strList(json['weaknesses']),
         forbiddenZone: json['forbiddenZone'] as String? ?? '',
-        preferences: _strList(json['preferences']),
+        preferences:
+            json['preferences'] == null ? null : _strList(json['preferences']),
         riskTolerance: json['riskTolerance'] as String? ?? '',
         keyNodes: (json['keyNodes'] as List<dynamic>? ?? [])
             .map((e) => Milestone.fromJson(Map<String, dynamic>.from(e as Map)))
             .toList(),
-        permanentItems: _strList(json['permanentItems']),
+        permanentItems: json['permanentItems'] == null
+            ? null
+            : _strList(json['permanentItems']),
       );
 
   static List<String> _strList(dynamic value) =>

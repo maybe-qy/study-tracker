@@ -31,14 +31,21 @@ class SelfCheckService {
     GameState state, {
     List<ArchiveLine> recentArchives = const [],
     MonthlyPlan? nextPlan,
+    // 本月刚生成的叙事。调用方必须在把 lastOutput 写回 state 之前传入，
+    // 否则「后果 / 性格 / 永久项」三项查的是上一个月的旧文本。
+    String newNarrative = '',
   }) {
     final issues = <String>[];
+    // 待检查文本：优先用本月新生成的，未提供时退回上月的。
+    final narrative = newNarrative.isNotEmpty
+        ? newNarrative
+        : (state.lastOutput?.narrative ?? '');
 
     // 1. 年份、月份、年龄是否一致
     if (!_checkAge(state)) issues.add('年龄与出生日期不一致');
 
     // 2. 上个月选择的后果是否体现在叙事中（关键字匹配描述）
-    if (!_checkConsequence(state)) issues.add('上月选择未体现为后果');
+    if (!_checkConsequence(state, narrative)) issues.add('上月选择未体现为后果');
 
     // 3. 随机事件计数器
     if (!_checkEventCounter(state)) issues.add('随机事件计数器未更新');
@@ -50,7 +57,7 @@ class SelfCheckService {
     final missing = _checkImbalance(recentArchives);
 
     // 6. 人物反应是否符合性格（弱检查：叙事中是否出现性格关键词）
-    if (!_checkPersonality(state)) issues.add('叙事与人设可能不符');
+    if (!_checkPersonality(state, narrative)) issues.add('叙事与人设可能不符');
 
     // 7. 关键时间节点是否已纳入考虑
     if (!_checkMilestones(state)) issues.add('关键时间节点未纳入');
@@ -62,7 +69,7 @@ class SelfCheckService {
     if (_checkRepetition(recentArchives)) issues.add('叙事可能重复');
 
     // 10. 永久项（运动 + 英语）是否出现
-    if (!_checkPermanentItems(state)) issues.add('永久项缺失');
+    if (!_checkPermanentItems(state, narrative)) issues.add('永久项缺失');
 
     return SelfCheckResult(
       passed: issues.isEmpty,
@@ -76,9 +83,8 @@ class SelfCheckService {
     return state.currentState.age == expected;
   }
 
-  bool _checkConsequence(GameState state) {
+  bool _checkConsequence(GameState state, String narrative) {
     final choice = state.lastChoiceText;
-    final narrative = state.lastOutput?.narrative ?? '';
     if (choice.isEmpty || narrative.isEmpty) return true; // 首月无历史，跳过
     // 关键字：choice 的核心描述词是否出现在叙事里
     final desc = choice.replaceFirst(RegExp(r'^[A-D]\.\s*'), '').trim();
@@ -122,9 +128,13 @@ class SelfCheckService {
     final covered = <String>{};
     for (final line in recent) {
       // skills 字段是用 /、; 分隔的关键词集合
-      covered.addAll(line.skills.split(RegExp(r'[/、,，;；\s]+')));
+      covered.addAll(line.skills
+          .split(RegExp(r'[/、,，;；\s]+'))
+          .where((e) => e.isNotEmpty)); // 空串会让 contains('') 恒真，必须剔除
       // risks 字段也可能体现关注维度
-      covered.addAll(line.risks.split(RegExp(r'[；;、,，\s]+')));
+      covered.addAll(line.risks
+          .split(RegExp(r'[；;、,，\s]+'))
+          .where((e) => e.isNotEmpty));
     }
     // 把"缺失"理解为：近期既没出现在技能也没出现在风险的维度
     return _allDimensions.where((d) {
@@ -133,8 +143,7 @@ class SelfCheckService {
     }).toList();
   }
 
-  bool _checkPersonality(GameState state) {
-    final narrative = state.lastOutput?.narrative ?? '';
+  bool _checkPersonality(GameState state, String narrative) {
     final traits = state.profile.personality;
     if (narrative.isEmpty || traits.isEmpty) return true;
     // 弱检查：至少有一个性格关键词在叙事的某个语境下出现（变体也行）
@@ -178,21 +187,25 @@ class SelfCheckService {
     return sim > 0.85;
   }
 
-  bool _checkPermanentItems(GameState state) {
-    final narrative = state.lastOutput?.narrative ?? '';
+  bool _checkPermanentItems(GameState state, String narrative) {
     if (narrative.isEmpty) return true; // 首月可能还没叙事
     final items = state.profile.permanentItems;
-    // 运动锚点 → 检查跑步/运动/锻炼等词
-    bool hasSport = false;
-    bool hasEnglish = false;
+    // 只校验档案里真实登记过的永久项，避免单项档案被永久判为缺失。
+    var needSport = false;
+    var needEnglish = false;
     for (final item in items) {
-      if (item.contains('运动') || item.contains('锚点')) {
-        hasSport = narrative.contains(RegExp(r'(跑|运动|锻炼|健身|球|骑|步|练)'));
-      }
-      if (item.contains('英语') || item.contains('外语')) {
-        hasEnglish = narrative.contains(RegExp(r'(英语|英文|外语|雅思|托福|口语|听力|阅读|单词|英语课)'));
-      }
+      if (item.contains('运动') || item.contains('锚点')) needSport = true;
+      if (item.contains('英语') || item.contains('外语')) needEnglish = true;
     }
-    return hasSport && hasEnglish;
+    if (!needSport && !needEnglish) return true;
+    if (needSport &&
+        !narrative.contains(RegExp(r'(跑|运动|锻炼|健身|球|骑|步|练)'))) {
+      return false;
+    }
+    if (needEnglish &&
+        !narrative.contains(RegExp(r'(英语|英文|外语|雅思|托福|口语|听力|阅读|单词)'))) {
+      return false;
+    }
+    return true;
   }
 }

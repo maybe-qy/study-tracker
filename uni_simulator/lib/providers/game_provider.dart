@@ -167,9 +167,13 @@ class GameNotifier extends Notifier<GameUiState> {
       );
 
       // 内部自检：结果仅写入调试日志，不进入用户界面。
+      // 必须显式传入本月新叙事，否则自检查的是上个月的旧文本。
       final check = ref
           .read(selfCheckServiceProvider)
-          .validate(game, recentArchives: recent, nextPlan: output.nextPlan);
+          .validate(game,
+              recentArchives: recent,
+              nextPlan: output.nextPlan,
+              newNarrative: output.narrative);
       if (!check.passed) {
         debugPrint('[SelfCheck] ${check.issues.join('；')}');
       }
