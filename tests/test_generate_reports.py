@@ -408,18 +408,21 @@ def test_build_subject_record_zero_score():
     assert rec["score"] == "0.0"  # 应显示 0.0，而非 "-"
 
 
-def test_personal_report_renders_zero_score(tmpdir):
-    """P1: 个人档案模板中 subject_scores 含 0 分时应正确渲染"""
-    from generate_reports import run as gen_reports
+def _load_app_template(template_name):
+    """加载 src/assets 下的 Jinja2 模板（v5.0 起为 Tab 式整合模板）。"""
     from jinja2 import Environment, FileSystemLoader
-    from datetime import datetime
 
     assets_dir = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
         "src", "assets"
     )
     env = Environment(loader=FileSystemLoader(assets_dir))
-    template = env.get_template("report_personal.html")
+    return env.get_template(template_name)
+
+
+def test_personal_report_renders_zero_score():
+    """P1: 个人档案模板中 subject_scores 含 0 分时应正确渲染"""
+    template = _load_app_template("report_overview.html")
 
     # 渲染包含 0 分的 subject_scores
     html = template.render(
@@ -448,6 +451,11 @@ def test_personal_report_renders_zero_score(tmpdir):
         ],
         tier_info=None,
         volatility_style="-",
+        trust_note=None,
+        divergence=None,
+        exams=[],
+        labels={"positive": "-", "normal": "-", "negative": "-"},
+        cross_validations=[],
         disclaimer="测试声明",
     )
 
@@ -456,36 +464,31 @@ def test_personal_report_renders_zero_score(tmpdir):
     assert "0.0" in html  # 0.0 分应被显示
 
 
-def test_subject_report_renders_dash_score_fallback(tmpdir):
+def test_subject_report_renders_dash_score_fallback():
     """P1: 单科追踪模板中 score='-' 时应回退显示 assigned/raw"""
-    from jinja2 import Environment, FileSystemLoader
-
-    assets_dir = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        "src", "assets"
-    )
-    env = Environment(loader=FileSystemLoader(assets_dir))
-    template = env.get_template("report_subject.html")
+    template = _load_app_template("report_subjects.html")
 
     html = template.render(
-        subject="物理",
         generated_at="2026-01-01 00:00",
-        dynamic_score=85,
-        latest=88,
-        highest=90,
-        trend_class="up",
-        trend_arrow="↑",
-        trend_text="上升",
-        is_first_record=False,
-        exam_count=3,
-        records=[
-            # score='-' 时应回退到 assigned
-            {"date": "2026-01", "exam": "期末", "score": "-",
-             "raw": 78, "assigned": 88, "confidence": "A", "method": "-"},
-            # score 有值时直接显示
-            {"date": "2025-12", "exam": "月考", "score": "85.0",
-             "raw": 75, "assigned": 85, "confidence": "A", "method": "赋分直映法"},
-        ],
+        subjects=[{
+            "name": "物理",
+            "has_data": True,
+            "is_first_record": False,
+            "dynamic_score": 85,
+            "latest": 88,
+            "highest": 90,
+            "trend_class": "up",
+            "trend_arrow": "↑",
+            "trend_text": "上升",
+            "records": [
+                # score='-' 时应回退到 assigned
+                {"date": "2026-01", "exam": "期末", "score": "-",
+                 "raw": 78, "assigned": 88, "confidence": "A", "method": "-"},
+                # score 有值时直接显示
+                {"date": "2025-12", "exam": "月考", "score": "85.0",
+                 "raw": 75, "assigned": 85, "confidence": "A", "method": "赋分直映法"},
+            ],
+        }],
         disclaimer="测试声明",
     )
 

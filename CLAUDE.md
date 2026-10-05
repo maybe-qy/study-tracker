@@ -12,7 +12,7 @@
 
 ```
 src/scripts/     # Python 脚本（config, calc_equivalent, record_exam, generate_reports, save_equivalent, excel_utils, setup_workspace）
-src/assets/      # Jinja2 HTML 模板（report_personal, report_trend, report_subject）
+src/assets/      # Jinja2 HTML 模板（report_overview=个人总览, report_subjects=单科追踪）
 skill/           # Skill 定义与参考文档（SKILL.md, QUICKSTART.md, references/）
 tests/           # pytest 测试（运行 `pytest tests/ -v` 查看当前状态）
 docs/            # 项目介绍与竞品分析、报告截图
